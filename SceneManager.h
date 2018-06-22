@@ -160,7 +160,7 @@ struct Scene
 	std::map<Model*, int> removableModels;
 	std::map<Model*, int> tempModels;
 	
-	float MARKER_SIZE = 0.2f;
+	float MARKER_SIZE = 0.05f;
 
 
 	void    Add(Model * n)
@@ -268,6 +268,8 @@ struct Scene
 	{
 		removableModels.erase(n);
 	}
+
+
 
 	GLuint CreateShader(GLenum type, const GLchar* src)
 	{
@@ -403,31 +405,55 @@ struct Scene
 		ovrAvatarHandInputState inputStateRight;
 		_ovrAvatarHandInputStateFromOvr(right, touchState, ovrHand_Right, &inputStateRight);
 
-		if (inputStateRight.touchMask == ovrAvatarTouch_Pointing) {
+
+		//should not be allowed to simply hold button A and continuously make a stream of models; let go and press again
+		static bool canCreateMarker = true;
+
+		//if (inputStateRight.touchMask == ovrAvatarTouch_Pointing) {
+		if (inputStateLeft.buttonMask == ovrAvatarButton_One){
 			if (inputStateRight.buttonMask == ovrAvatarButton_One) {
 				//pure green: 	0xff008000
 				CreateMarker(MARKER_SIZE, 0xff008000, ovr_rightP);
 			}
-			if (inputStateRight.buttonMask == ovrAvatarButton_Two && ColorRemovableModel(ovr_rightP)) {
+			else if (inputStateRight.buttonMask == ovrAvatarButton_Two && ColorRemovableModel(ovr_rightP)) {
 				//remove pointed-at marker
 				RemoveModel(ColorRemovableModel(ovr_rightP));
 			}
 			//just pointing, not pressing A or B
+			
 			else {
 				//TO DO: colorRemovableModel. If return false, create a new light green model. Store model in vector, remove all of these temp models at end of main loop
-				if (!ColorRemovableModel(ovr_rightP)) {
+				bool remove = ColorRemovableModel(ovr_rightP);
+				if (!remove) {
 					//light green:  0xFF00FF00
 					//purple (for testing): 0xFFA535F0
 					Model *newMarker = CreateMarker(MARKER_SIZE, 0xFFA535F0, ovr_rightP);
 					AddTemp(newMarker);
 				}
+				
 			}
 		}
 
-		if (inputStateRight.buttonMask == ovrAvatarButton_One) {
+		if (inputStateRight.buttonMask != ovrAvatarButton_Two) {
+			removeTempModels();
+		}
+
+		if (inputStateRight.buttonMask != ovrAvatarButton_One && !canCreateMarker) {
+			canCreateMarker = true;
+		}
+
+		if (inputStateRight.buttonMask == ovrAvatarButton_One && canCreateMarker) {
 			//pure green: 	0xff008000
 			//yellow (for testing): 0xFFF6FF00
+			//Vector3f * temp;
+			//*temp = ovr_rightP;
 			CreateMarker(MARKER_SIZE, 0xFFF6FF00, ovr_rightP);
+			canCreateMarker = false;
+		}
+
+		else if (inputStateRight.buttonMask == ovrAvatarButton_Two) {
+			Model *newMarker = CreateMarker(MARKER_SIZE, 0xFFA535F0, ovr_rightP);
+			AddTemp(newMarker);
 		}
 	}
 
@@ -440,9 +466,19 @@ struct Scene
 
 		Vector3f ovr_rightP = trackingState.HandPoses[ovrHand_Right].ThePose.Position;
 
-		for (auto const &m : removableModels) {
+		for (auto const &m : tempModels) {
 			auto model = m.first;
 			model->Pos = ovr_rightP;
+		}
+	}
+	
+	//clear map of temp models
+	void removeTempModels()
+	{
+		for (auto const &m : tempModels) {
+			auto model = m.first;
+			tempModels.erase(model);
+			RemoveModel(model);
 		}
 	}
 

@@ -107,8 +107,8 @@ static GLuint _compileProgramFromFiles(const char vertexShaderPath[], const char
 	for (int i = 0; i < SHADER_COUNT; ++i) {
 
 		//Provide path to shaders
-		//std::string fullPath = "C:\\Users\\zhoui\\Documents\\8keXm\\TinyRoom-Avatar\\Shaders\\";
-		std::string fullPath = "E:\\Classes\\2018 Summer\\UROP\\TinyRoom-Avatar\\Shaders\\";
+		std::string fullPath = "C:\\Users\\zhoui\\Documents\\8keXm\\TinyRoom-Avatar\\Shaders\\";
+		//std::string fullPath = "E:\\Classes\\2018 Summer\\UROP\\TinyRoom-Avatar\\Shaders\\";
 		//SDL_GetBasePath();
 
 		fullPath += fileSources[i];
