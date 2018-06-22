@@ -291,6 +291,7 @@ struct Scene
 		return shader;
 	}
 
+	/*
 	ShaderFill * CreateTextures()
 	{
 		static const GLchar* VertexShaderSrc =
@@ -348,6 +349,8 @@ struct Scene
 
 		return *grid_material;
 	}
+	*/
+	
 
 
 	Model * ColorRemovableModel(Vector3f rightHandPos) 
@@ -414,7 +417,8 @@ struct Scene
 				//TO DO: colorRemovableModel. If return false, create a new light green model. Store model in vector, remove all of these temp models at end of main loop
 				if (!ColorRemovableModel(ovr_rightP)) {
 					//light green:  0xFF00FF00
-					Model *newMarker = CreateMarker(MARKER_SIZE, 0xFF00FF00, ovr_rightP);
+					//purple (for testing): 0xFFA535F0
+					Model *newMarker = CreateMarker(MARKER_SIZE, 0xFFA535F0, ovr_rightP);
 					AddTemp(newMarker);
 				}
 			}
@@ -422,14 +426,9 @@ struct Scene
 
 		if (inputStateRight.buttonMask == ovrAvatarButton_One) {
 			//pure green: 	0xff008000
-			CreateMarker(MARKER_SIZE, 0xff008000, ovr_rightP);
+			//yellow (for testing): 0xFFF6FF00
+			CreateMarker(MARKER_SIZE, 0xFFF6FF00, ovr_rightP);
 		}
-
-		/*
-		if (inputStateRight.buttonMask == ovrAvatarButton_One) {
-			Model *newMarker = CreateMarker(10.0f, 0xFF00FF00, Vector3f(0, 0, 0));
-		}
-		*/
 	}
 
 	//move all temp models to the current hand position
