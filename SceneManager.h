@@ -160,7 +160,7 @@ struct Scene
 	std::map<Model*, int> removableModels;
 	std::map<Model*, int> tempModels;
 	
-	float MARKER_SIZE = 0.05f;
+	float MARKER_SIZE = 0.02f;
 
 
 	void    Add(Model * n)
@@ -176,6 +176,7 @@ struct Scene
 
 	void AddTemp(Model * n)
 	{
+		RemoveModel(n);
 		tempModels.insert(std::pair<Model*, int>(n, 1));
 	}
 
@@ -190,7 +191,38 @@ struct Scene
 			m.first->Render(view, proj);
 		}
 
+		//render tempModels as well
+		for (auto const m : tempModels) {
+			m.first->Render(view, proj);
+		}
+
 	}
+
+	//transforms the controller position to be right on top of the user's controller (not far in front)
+	Vector3f VirtualPosFromReal(Vector3f pos)
+	{
+		Vector3f newPos;
+		newPos.x = -1*pos.x;
+		newPos.y = pos.y;
+		newPos.z = -1*pos.z - 5.0f;
+
+		return newPos;
+	}
+
+	//rotates the marker pos to accomodate for controller orientation and place it in front of controller
+	Vector3f MarkerTranslateToPointer(Vector3f handPos, glm::quat handQuat)
+	{
+		Vector3f newMarkerPos;
+	
+		glm::vec4 u(0, 0, 0.1f,1.0f);
+		glm::vec4 translate = handQuat * u;
+		newMarkerPos.x = handPos.x + translate.x;
+		newMarkerPos.y = handPos.y - translate.y;
+		newMarkerPos.z = handPos.z + translate.z;
+
+		return newMarkerPos;
+	}
+
 
 	Model * CreateMarker(float size, DWORD color, Vector3f pos)
 	{
@@ -250,19 +282,15 @@ struct Scene
 		glDeleteShader(vshader);
 		glDeleteShader(fshader);
 
-
-
-
-
-
 		Model * marker = new Model(Vector3f(0, 0, 0), (grid_material[2]));
-		marker->AddSolidColorBox(0, 0, 0, size, size, size, color);
+		marker->AddSolidColorBox(-0.5f*size, -0.5f*size, -0.5f*size, 0.5f*size, 0.5f*size, 0.5f*size, color);
 		marker->AllocateBuffers();
 		marker->Pos = pos;
 		AddRemovable(marker);
 
 		return marker;
 	}
+
 
 	void RemoveModel(Model * n)
 	{
@@ -352,26 +380,25 @@ struct Scene
 		return *grid_material;
 	}
 	*/
-	
-
 
 	Model * ColorRemovableModel(Vector3f rightHandPos) 
 	{
-		for (auto const &m : removableModels) {
-			auto model = *m.first;
-			Vector3f modelPos = model.Pos;
+		float target = 0.02f;
+
+		for (auto const m : removableModels) {
+			Model *model = m.first;
+			Vector3f modelPos = (*model).Pos;
+			//Vector3f modelPos(0, 0, 0);
 			//might have to change this to be a target area, not so specific
-			if (rightHandPos == modelPos) {
-				RemoveModel(&model);
+			if (rightHandPos.Distance(modelPos) <= target) {
 				//dark red: 	0xFF800000
 				Model *newMarker = CreateMarker(MARKER_SIZE, 0xFF800000, modelPos);
+				RemoveModel(model);
+
 				return newMarker;
 			}
-
-			else {
-				return nullptr;
-			}
 		}
+		return nullptr;
 	}
 
 
@@ -382,13 +409,17 @@ struct Scene
 		ovrTrackingState trackingState = ovr_GetTrackingState(session, 0.0, false);
 
 		glm::vec3 hmdP = _glmFromOvrVector(trackingState.HeadPose.ThePose.Position);
+		Vector3f ovr_hmdP = VirtualPosFromReal(trackingState.HeadPose.ThePose.Position);
 		glm::quat hmdQ = _glmFromOvrQuat(trackingState.HeadPose.ThePose.Orientation);
-		Vector3f ovr_leftP = trackingState.HandPoses[ovrHand_Left].ThePose.Position;
+		Vector3f ovr_leftP = VirtualPosFromReal(trackingState.HandPoses[ovrHand_Left].ThePose.Position);
 		glm::vec3 leftP = _glmFromOvrVector(ovr_leftP);
 		glm::quat leftQ = _glmFromOvrQuat(trackingState.HandPoses[ovrHand_Left].ThePose.Orientation);
-		Vector3f ovr_rightP = trackingState.HandPoses[ovrHand_Right].ThePose.Position;
+		Vector3f ovr_rightP = VirtualPosFromReal(trackingState.HandPoses[ovrHand_Right].ThePose.Position);
 		glm::vec3 rightP = _glmFromOvrVector(ovr_rightP);
 		glm::quat rightQ = _glmFromOvrQuat(trackingState.HandPoses[ovrHand_Right].ThePose.Orientation);
+
+		Vector3f trans_rightP = MarkerTranslateToPointer(ovr_rightP, rightQ);
+		Vector3f trans_leftP = MarkerTranslateToPointer(ovr_leftP, leftQ);
 
 		ovrAvatarTransform hmd;
 		_ovrAvatarTransformFromGlm(hmdP, hmdQ, glm::vec3(1.0f), &hmd);
@@ -408,31 +439,49 @@ struct Scene
 
 		//should not be allowed to simply hold button A and continuously make a stream of models; let go and press again
 		static bool canCreateMarker = true;
+		static bool canColorModel = true;
+		
 
+		//sanity check for position of head
+		/*
+		static bool headMarker = true;
+		Vector3f ovr_hmdP = VirtualPosFromReal(trackingState.HeadPose.ThePose.Position);
+		CreateMarker(MARKER_SIZE, 0XFFFFFFFF, ovr_hmdP);
+		headMarker = false;
+		*/
+		/*
 		//if (inputStateRight.touchMask == ovrAvatarTouch_Pointing) {
 		if (inputStateLeft.buttonMask == ovrAvatarButton_One){
 			if (inputStateRight.buttonMask == ovrAvatarButton_One) {
 				//pure green: 	0xff008000
-				CreateMarker(MARKER_SIZE, 0xff008000, ovr_rightP);
+				CreateMarker(MARKER_SIZE, 0xff008000, trans_rightP);
 			}
-			else if (inputStateRight.buttonMask == ovrAvatarButton_Two && ColorRemovableModel(ovr_rightP)) {
-				//remove pointed-at marker
-				RemoveModel(ColorRemovableModel(ovr_rightP));
+			// if press B and a model has not yet been recolored and the model can be recolored
+			else if (inputStateRight.buttonMask == ovrAvatarButton_Two && canColorModel && ColorRemovableModel(trans_rightP)) {
+				//disallow recoloring any models
+				canColorModel = false;
+			}
+			// if currently not allowed to recolor anything and not trying to recolor anything
+			else if (inputStateRight.buttonMask == ovrAvatarButton_Two && !canColorModel && !ColorRemovableModel(trans_rightP)) {
+				//allow recoloring a model
+				canColorModel = true;
 			}
 			//just pointing, not pressing A or B
 			
 			else {
 				//TO DO: colorRemovableModel. If return false, create a new light green model. Store model in vector, remove all of these temp models at end of main loop
-				bool remove = ColorRemovableModel(ovr_rightP);
+				bool remove = ColorRemovableModel(trans_rightP);
 				if (!remove) {
 					//light green:  0xFF00FF00
 					//purple (for testing): 0xFFA535F0
-					Model *newMarker = CreateMarker(MARKER_SIZE, 0xFFA535F0, ovr_rightP);
+					Model *newMarker = CreateMarker(MARKER_SIZE, 0xFFA535F0, trans_rightP);
 					AddTemp(newMarker);
 				}
 				
 			}
+			
 		}
+		*/
 
 		if (inputStateRight.buttonMask != ovrAvatarButton_Two) {
 			removeTempModels();
@@ -447,13 +496,15 @@ struct Scene
 			//yellow (for testing): 0xFFF6FF00
 			//Vector3f * temp;
 			//*temp = ovr_rightP;
-			CreateMarker(MARKER_SIZE, 0xFFF6FF00, ovr_rightP);
+			CreateMarker(MARKER_SIZE, 0xFFF6FF00, trans_rightP);
 			canCreateMarker = false;
 		}
 
 		else if (inputStateRight.buttonMask == ovrAvatarButton_Two) {
-			Model *newMarker = CreateMarker(MARKER_SIZE, 0xFFA535F0, ovr_rightP);
+			Model *newMarker = CreateMarker(MARKER_SIZE, 0xFFA535F0, trans_rightP);
 			AddTemp(newMarker);
+			RemoveModel(newMarker);
+			//ColorRemovableModel(trans_rightP);
 		}
 	}
 
@@ -463,8 +514,10 @@ struct Scene
 		ovrInputState touchState;
 		ovr_GetInputState(session, ovrControllerType_Active, &touchState);
 		ovrTrackingState trackingState = ovr_GetTrackingState(session, 0.0, false);
+		Vector3f rightP = VirtualPosFromReal(trackingState.HandPoses[ovrHand_Right].ThePose.Position);
+		glm::quat rightQ = _glmFromOvrQuat(trackingState.HandPoses[ovrHand_Right].ThePose.Orientation);
 
-		Vector3f ovr_rightP = trackingState.HandPoses[ovrHand_Right].ThePose.Position;
+		Vector3f ovr_rightP = MarkerTranslateToPointer(rightP,rightQ);
 
 		for (auto const &m : tempModels) {
 			auto model = m.first;
