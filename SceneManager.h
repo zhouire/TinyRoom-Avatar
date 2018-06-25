@@ -163,7 +163,7 @@ struct Scene
 	float MARKER_SIZE = 0.02f;
 	float TARGET_SIZE = 0.01f;
 	//model highlighted for potential removal
-	static Model *targetModel;
+	Model *targetModel;
 
 
 	void    Add(Model * n)
@@ -518,6 +518,8 @@ struct Scene
 				//delete targetModel if pressing Y
 				if (inputStateLeft.buttonMask == ovrAvatarButton_Two) {
 					RemoveModel(targetModel);
+					//clear targetModel because the model in question has been removed
+					targetModel = nullptr;
 				}
 				//try to clear targetModel if there is one currently
 				else {
