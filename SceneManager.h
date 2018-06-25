@@ -161,6 +161,9 @@ struct Scene
 	std::map<Model*, int> tempModels;
 	
 	float MARKER_SIZE = 0.02f;
+	float TARGET_SIZE = 0.01f;
+	//model highlighted for potential removal
+	static Model *targetModel;
 
 
 	void    Add(Model * n)
@@ -383,22 +386,32 @@ struct Scene
 
 	Model * ColorRemovableModel(Vector3f rightHandPos) 
 	{
-		float target = 0.02f;
-
 		for (auto const m : removableModels) {
 			Model *model = m.first;
 			Vector3f modelPos = (*model).Pos;
 			//Vector3f modelPos(0, 0, 0);
-			//might have to change this to be a target area, not so specific
-			if (rightHandPos.Distance(modelPos) <= target) {
+			if (rightHandPos.Distance(modelPos) <= TARGET_SIZE) {
 				//dark red: 	0xFF800000
 				Model *newMarker = CreateMarker(MARKER_SIZE, 0xFF800000, modelPos);
 				RemoveModel(model);
+				targetModel = newMarker;
 
 				return newMarker;
 			}
 		}
 		return nullptr;
+	}
+
+	//checks to see if the targetmodel can be cleared so a new model is allowed to be the targetmodel
+	void CheckTargetModel(Vector3f rightHandPos) 
+	{
+		Vector3f targetPos = targetModel->Pos;
+		if (rightHandPos.Distance(targetPos) > TARGET_SIZE) {
+			//pure green: 0xff008000
+			Model *newMarker = CreateMarker(MARKER_SIZE, 0xff008000, targetPos);
+			RemoveModel(targetModel);
+			targetModel = nullptr;
+		}
 	}
 
 
@@ -439,16 +452,7 @@ struct Scene
 
 		//should not be allowed to simply hold button A and continuously make a stream of models; let go and press again
 		static bool canCreateMarker = true;
-		static bool canColorModel = true;
-		
 
-		//sanity check for position of head
-		/*
-		static bool headMarker = true;
-		Vector3f ovr_hmdP = VirtualPosFromReal(trackingState.HeadPose.ThePose.Position);
-		CreateMarker(MARKER_SIZE, 0XFFFFFFFF, ovr_hmdP);
-		headMarker = false;
-		*/
 		/*
 		//if (inputStateRight.touchMask == ovrAvatarTouch_Pointing) {
 		if (inputStateLeft.buttonMask == ovrAvatarButton_One){
@@ -467,7 +471,7 @@ struct Scene
 				canColorModel = true;
 			}
 			//just pointing, not pressing A or B
-			
+
 			else {
 				//TO DO: colorRemovableModel. If return false, create a new light green model. Store model in vector, remove all of these temp models at end of main loop
 				bool remove = ColorRemovableModel(trans_rightP);
@@ -477,9 +481,9 @@ struct Scene
 					Model *newMarker = CreateMarker(MARKER_SIZE, 0xFFA535F0, trans_rightP);
 					AddTemp(newMarker);
 				}
-				
+
 			}
-			
+
 		}
 		*/
 
@@ -496,16 +500,33 @@ struct Scene
 			//yellow (for testing): 0xFFF6FF00
 			//Vector3f * temp;
 			//*temp = ovr_rightP;
-			CreateMarker(MARKER_SIZE, 0xFFF6FF00, trans_rightP);
+			CreateMarker(MARKER_SIZE, 0xff008000, trans_rightP);
 			canCreateMarker = false;
 		}
 
 		else if (inputStateRight.buttonMask == ovrAvatarButton_Two) {
 			Model *newMarker = CreateMarker(MARKER_SIZE, 0xFFA535F0, trans_rightP);
 			AddTemp(newMarker);
+			//we only want the temp marker to be in the tempModels map
 			RemoveModel(newMarker);
-			//ColorRemovableModel(trans_rightP);
+			//try to find a targetModel if there is not one currently
+			if (!targetModel) {
+				ColorRemovableModel(trans_rightP);
+			}
+			
+			else {
+				//delete targetModel if pressing Y
+				if (inputStateLeft.buttonMask == ovrAvatarButton_Two) {
+					RemoveModel(targetModel);
+				}
+				//try to clear targetModel if there is one currently
+				else {
+					CheckTargetModel(trans_rightP);
+				}
+			}
 		}
+
+
 	}
 
 	//move all temp models to the current hand position
