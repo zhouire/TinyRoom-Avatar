@@ -386,31 +386,42 @@ struct Scene
 
 	Model * ColorRemovableModel(Vector3f rightHandPos) 
 	{
-		for (auto const m : removableModels) {
-			Model *model = m.first;
-			Vector3f modelPos = (*model).Pos;
-			//Vector3f modelPos(0, 0, 0);
-			if (rightHandPos.Distance(modelPos) <= TARGET_SIZE) {
-				//dark red: 	0xFF800000
-				Model *newMarker = CreateMarker(MARKER_SIZE, 0xFF800000, modelPos);
-				RemoveModel(model);
-				targetModel = newMarker;
+		//make sure there is currently no targetModel when ColorRemovableModel is called
+		if (!targetModel) {
+			for (auto const m : removableModels) {
+				Model *model = m.first;
+				Vector3f modelPos = (*model).Pos;
+				//Vector3f modelPos(0, 0, 0);
+				if (rightHandPos.Distance(modelPos) <= TARGET_SIZE) {
+					//dark red: 	0xFF800000
+					Model *newMarker = CreateMarker(MARKER_SIZE, 0xFF800000, modelPos);
+					RemoveModel(model);
+					targetModel = newMarker;
 
-				return newMarker;
+					return newMarker;
+				}
 			}
 		}
 		return nullptr;
 	}
 
+	void ResetTargetModel(Vector3f targetPos) 
+	{
+		//pure green: 0xff008000
+		Model *newMarker = CreateMarker(MARKER_SIZE, 0xff008000, targetPos);
+		RemoveModel(targetModel);
+		targetModel = nullptr;
+	}
+
 	//checks to see if the targetmodel can be cleared so a new model is allowed to be the targetmodel
 	void CheckTargetModel(Vector3f rightHandPos) 
 	{
-		Vector3f targetPos = targetModel->Pos;
-		if (rightHandPos.Distance(targetPos) > TARGET_SIZE) {
-			//pure green: 0xff008000
-			Model *newMarker = CreateMarker(MARKER_SIZE, 0xff008000, targetPos);
-			RemoveModel(targetModel);
-			targetModel = nullptr;
+		//make sure targetModel is not nullptr
+		if (targetModel) {
+			Vector3f targetPos = targetModel->Pos;
+			if (rightHandPos.Distance(targetPos) > TARGET_SIZE) {
+				ResetTargetModel(targetPos);
+			}
 		}
 	}
 
@@ -493,6 +504,11 @@ struct Scene
 
 		if (inputStateRight.buttonMask != ovrAvatarButton_One && !canCreateMarker) {
 			canCreateMarker = true;
+		}
+
+		if (inputStateRight.buttonMask != ovrAvatarButton_Two && targetModel) {
+			Vector3f targetPos = targetModel->Pos;
+			ResetTargetModel(targetPos);
 		}
 
 		if (inputStateRight.buttonMask == ovrAvatarButton_One && canCreateMarker) {
