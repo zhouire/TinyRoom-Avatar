@@ -334,6 +334,8 @@ static bool MainLoop(bool retryCreate)
             if (Platform.Key['D'])                            Pos2 += Matrix4f::RotationY(Yaw).Transform(Vector3f(+0.05f, 0, 0));
             if (Platform.Key['A'])                            Pos2 += Matrix4f::RotationY(Yaw).Transform(Vector3f(-0.05f, 0, 0));
 
+
+
             // Animate the cube
             static float cubeClock = 0;
             if (!sessionStatus.OverlayPresent) // Pause the application if an overlay is present.

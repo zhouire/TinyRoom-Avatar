@@ -113,6 +113,49 @@ struct Model
 		}
 	}
 
+	//returns the vectors added to a center point representing the vertices on the edges
+	std::vector<Vector3f> AddedVectors(std::vector<Vector3f> lineCore, glm::quat handQ) {
+		std::vector<Vector3f> added;
+		
+		//Unit vector representing the pointing orientation
+		glm::vec4 u(0, 0, 1.0f, 1.0f);
+		glm::vec4 translate = handQ * u;
+		Vector3f v;
+		v.x = translate.x;
+		v.y = translate.y;
+		v.z = translate.z;
+
+		//generate directional unit vector of the lineCore
+		Vector3f lineDir = lineCore[lineCore.size() - 1] - lineCore[lineCore.size() - 2];
+		Vector3f v_norm = lineDir * (v.Dot(lineDir));
+		Vector3f v_norm_unit = v_norm / (v_norm.Length());
+
+		/*
+		Vector3f v_tan = v - v_norm;
+		//unit tangent
+		Vector3f v_tan_unit = v_tan / (v_tan.Length());
+		*/
+
+		added.push_back(v_norm_unit);
+		added.push_back(v_norm_unit.Cross(v));
+		added.push_back(v_norm_unit*(-1));
+		added.push_back(v_norm_unit.Cross(v)*(-1));
+
+		return added;
+	}
+	
+
+
+	void AddLineSegment(Vector3f prev, Vector3f next, float thickness, DWORD color) {
+		//TODO
+	}
+
+	void AddEndCap(std::vector<Vertex> edge1, std::vector<Vertex> edge2, std::vector<Vertex> edge3, std::vector<Vertex> edge4) {
+		//TODO
+	}
+
+
+
 	void Render(Matrix4f view, Matrix4f proj)
 	{
 		Matrix4f combined = proj * view * GetMatrix();
@@ -159,11 +202,15 @@ struct Scene
 	//use map for built-in find function
 	std::map<Model*, int> removableModels;
 	std::map<Model*, int> tempModels;
-	
+
+	std::map<Model*, int> tempLines;
+
 	float MARKER_SIZE = 0.02f;
 	float TARGET_SIZE = 0.01f;
 	//model highlighted for potential removal
 	Model *targetModel;
+
+	std::vector<Vector3f> lineCore;
 
 
 	void    Add(Model * n)
@@ -205,9 +252,9 @@ struct Scene
 	Vector3f VirtualPosFromReal(Vector3f pos)
 	{
 		Vector3f newPos;
-		newPos.x = -1*pos.x;
+		newPos.x = -1 * pos.x;
 		newPos.y = pos.y;
-		newPos.z = -1*pos.z - 5.0f;
+		newPos.z = -1 * pos.z - 5.0f;
 
 		return newPos;
 	}
@@ -216,8 +263,8 @@ struct Scene
 	Vector3f MarkerTranslateToPointer(Vector3f handPos, glm::quat handQuat)
 	{
 		Vector3f newMarkerPos;
-	
-		glm::vec4 u(0, 0, 0.1f,1.0f);
+
+		glm::vec4 u(0, 0, 0.1f, 1.0f);
 		glm::vec4 translate = handQuat * u;
 		newMarkerPos.x = handPos.x + translate.x;
 		newMarkerPos.y = handPos.y - translate.y;
@@ -292,6 +339,10 @@ struct Scene
 		AddRemovable(marker);
 
 		return marker;
+	}
+
+	Model * CreateThinLine(Vector3f init, Vector3f fin) {
+
 	}
 
 
@@ -384,7 +435,7 @@ struct Scene
 	}
 	*/
 
-	Model * ColorRemovableModel(Vector3f rightHandPos) 
+	Model * ColorRemovableModel(Vector3f rightHandPos)
 	{
 		//make sure there is currently no targetModel when ColorRemovableModel is called
 		if (!targetModel) {
@@ -405,7 +456,7 @@ struct Scene
 		return nullptr;
 	}
 
-	void ResetTargetModel(Vector3f targetPos) 
+	void ResetTargetModel(Vector3f targetPos)
 	{
 		//pure green: 0xff008000
 		Model *newMarker = CreateMarker(MARKER_SIZE, 0xff008000, targetPos);
@@ -414,7 +465,7 @@ struct Scene
 	}
 
 	//checks to see if the targetmodel can be cleared so a new model is allowed to be the targetmodel
-	void CheckTargetModel(Vector3f rightHandPos) 
+	void CheckTargetModel(Vector3f rightHandPos)
 	{
 		//make sure targetModel is not nullptr
 		if (targetModel) {
@@ -442,9 +493,6 @@ struct Scene
 		glm::vec3 rightP = _glmFromOvrVector(ovr_rightP);
 		glm::quat rightQ = _glmFromOvrQuat(trackingState.HandPoses[ovrHand_Right].ThePose.Orientation);
 
-		Vector3f trans_rightP = MarkerTranslateToPointer(ovr_rightP, rightQ);
-		Vector3f trans_leftP = MarkerTranslateToPointer(ovr_leftP, leftQ);
-
 		ovrAvatarTransform hmd;
 		_ovrAvatarTransformFromGlm(hmdP, hmdQ, glm::vec3(1.0f), &hmd);
 
@@ -461,85 +509,84 @@ struct Scene
 		_ovrAvatarHandInputStateFromOvr(right, touchState, ovrHand_Right, &inputStateRight);
 
 
+		Vector3f trans_rightP = MarkerTranslateToPointer(ovr_rightP, rightQ);
+		Vector3f trans_leftP = MarkerTranslateToPointer(ovr_leftP, leftQ);
+
+
+
 		//should not be allowed to simply hold button A and continuously make a stream of models; let go and press again
 		static bool canCreateMarker = true;
+		//toggle between thin and thick lines
+		static bool thinLines = true;
 
 		/*
-		//if (inputStateRight.touchMask == ovrAvatarTouch_Pointing) {
-		if (inputStateLeft.buttonMask == ovrAvatarButton_One){
-			if (inputStateRight.buttonMask == ovrAvatarButton_One) {
-				//pure green: 	0xff008000
-				CreateMarker(MARKER_SIZE, 0xff008000, trans_rightP);
-			}
-			// if press B and a model has not yet been recolored and the model can be recolored
-			else if (inputStateRight.buttonMask == ovrAvatarButton_Two && canColorModel && ColorRemovableModel(trans_rightP)) {
-				//disallow recoloring any models
-				canColorModel = false;
-			}
-			// if currently not allowed to recolor anything and not trying to recolor anything
-			else if (inputStateRight.buttonMask == ovrAvatarButton_Two && !canColorModel && !ColorRemovableModel(trans_rightP)) {
-				//allow recoloring a model
-				canColorModel = true;
-			}
-			//just pointing, not pressing A or B
-
-			else {
-				//TO DO: colorRemovableModel. If return false, create a new light green model. Store model in vector, remove all of these temp models at end of main loop
-				bool remove = ColorRemovableModel(trans_rightP);
-				if (!remove) {
-					//light green:  0xFF00FF00
-					//purple (for testing): 0xFFA535F0
-					Model *newMarker = CreateMarker(MARKER_SIZE, 0xFFA535F0, trans_rightP);
-					AddTemp(newMarker);
-				}
-
-			}
+		//forward/backwards movement
+		if (inputStateRight.touchMask == ovrAvatarTouch_Joystick) {
 
 		}
 		*/
 
-		if (inputStateRight.buttonMask != ovrAvatarButton_Two) {
-			removeTempModels();
-		}
+		//if we are actively drawing a line
+		if (lineCore.size() > 0) {
+			if (thinLines) {
+				lineCore.push_back(trans_rightP);
 
-		if (inputStateRight.buttonMask != ovrAvatarButton_One && !canCreateMarker) {
-			canCreateMarker = true;
-		}
-
-		if (inputStateRight.buttonMask != ovrAvatarButton_Two && targetModel) {
-			Vector3f targetPos = targetModel->Pos;
-			ResetTargetModel(targetPos);
-		}
-
-		if (inputStateRight.buttonMask == ovrAvatarButton_One && canCreateMarker) {
-			//pure green: 	0xff008000
-			//yellow (for testing): 0xFFF6FF00
-			//Vector3f * temp;
-			//*temp = ovr_rightP;
-			CreateMarker(MARKER_SIZE, 0xff008000, trans_rightP);
-			canCreateMarker = false;
-		}
-
-		else if (inputStateRight.buttonMask == ovrAvatarButton_Two) {
-			Model *newMarker = CreateMarker(MARKER_SIZE, 0xFFA535F0, trans_rightP);
-			AddTemp(newMarker);
-			//we only want the temp marker to be in the tempModels map
-			RemoveModel(newMarker);
-			//try to find a targetModel if there is not one currently
-			if (!targetModel) {
-				ColorRemovableModel(trans_rightP);
 			}
-			
-			else {
-				//delete targetModel if pressing Y
-				if (inputStateLeft.buttonMask == ovrAvatarButton_Two) {
-					RemoveModel(targetModel);
-					//clear targetModel because the model in question has been removed
-					targetModel = nullptr;
+		}
+		
+		else {
+			if (inputStateRight.buttonMask == ovrAvatarButton_Two) {
+				lineCore.push_back(trans_rightP);
+			}
+
+			//replaced all ovrAvatarButtonTwo with touchMask -> ovrAvatarTouch_Index
+			if (inputStateRight.touchMask != ovrAvatarTouch_Index) {
+				removeTempModels();
+			}
+
+			if (inputStateRight.buttonMask != ovrAvatarButton_One && !canCreateMarker) {
+				canCreateMarker = true;
+			}
+
+			if (inputStateRight.touchMask != ovrAvatarTouch_Index && targetModel) {
+				Vector3f targetPos = targetModel->Pos;
+				ResetTargetModel(targetPos);
+			}
+
+			if (inputStateLeft.buttonMask == ovrAvatarButton_One) {
+				thinLines = !thinLines;
+			}
+
+			if (inputStateRight.buttonMask == ovrAvatarButton_One && canCreateMarker) {
+				//pure green: 	0xff008000
+				//yellow (for testing): 0xFFF6FF00
+				//Vector3f * temp;
+				//*temp = ovr_rightP;
+				CreateMarker(MARKER_SIZE, 0xff008000, trans_rightP);
+				canCreateMarker = false;
+			}
+
+			else if (inputStateRight.touchMask == ovrAvatarTouch_Index) {
+				Model *newMarker = CreateMarker(MARKER_SIZE, 0xFFA535F0, trans_rightP);
+				AddTemp(newMarker);
+				//we only want the temp marker to be in the tempModels map
+				RemoveModel(newMarker);
+				//try to find a targetModel if there is not one currently
+				if (!targetModel) {
+					ColorRemovableModel(trans_rightP);
 				}
-				//try to clear targetModel if there is one currently
+
 				else {
-					CheckTargetModel(trans_rightP);
+					//delete targetModel if pressing Y
+					if (inputStateLeft.buttonMask == ovrAvatarButton_Two) {
+						RemoveModel(targetModel);
+						//clear targetModel because the model in question has been removed
+						targetModel = nullptr;
+					}
+					//try to clear targetModel if there is one currently
+					else {
+						CheckTargetModel(trans_rightP);
+					}
 				}
 			}
 		}
