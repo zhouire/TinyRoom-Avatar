@@ -339,9 +339,22 @@ struct Model
 //------------------------------------------------------------------------- 
 struct Scene
 {
+	struct LineComponents
+	{
+		std::vector<Vector3f> Core;
+		std::vector<glm::quat> Q;
+	};
+
 	std::vector<Model*> Models;
 	//use map for built-in find function
 	std::map<Model*, int> removableModels;
+	//markers have meaningless int values
+	std::map<Model*, int> removableMarkers;
+	//straight lines are represented by their vector core [start,end]
+	std::map<Model*, LineComponents> removableStraightLines;
+	//curved lines are represented by the points in their lineCore
+	std::map<Model*, LineComponents> removableCurvedLines;
+
 	std::map<Model*, int> tempModels;
 	std::map<Model*, int> tempLines;
 
@@ -358,6 +371,9 @@ struct Scene
 	std::vector<glm::quat> allHandQ;
 
 
+	/************************************
+	Add functions
+	*************************************/
 	void    Add(Model * n)
 	{
 		Models.push_back(n);
@@ -377,9 +393,34 @@ struct Scene
 
 	void AddTempLine(Model * n)
 	{
-		RemoveModel(n);
 		tempLines.insert(std::pair<Model *, int>(n, 1));
 	}
+
+	void AddRemovableMarker(Model * n)
+	{
+		removableMarkers.insert(std::pair<Model*, int>(n, 1));
+	}
+
+	void AddRemovableStraightLine(Model * n, Vector3f start, Vector3f end, glm::quat handQ)
+	{
+		std::vector<Vector3f> core{ start,end };
+		LineComponents line;
+		line.Core = core;
+		std::vector<glm::quat> quat{ handQ };
+		line.Q = quat;
+		removableStraightLines.insert(std::pair<Model*, LineComponents>(n, line));
+	}
+	
+	void AddRemovableCurvedLine(Model * n, std::vector<Vector3f> lineCore, std::vector<glm::quat> allHandQ)
+	{
+		LineComponents line;
+		line.Core = lineCore;
+		line.Q = allHandQ;
+		removableCurvedLines.insert(std::pair<Model*, LineComponents>(n, line));
+	}
+
+
+
 
 	void Render(Matrix4f view, Matrix4f proj)
 	{
@@ -439,6 +480,7 @@ struct Scene
 		marker->AllocateBuffers();
 		marker->Pos = pos;
 		AddRemovable(marker);
+		AddRemovableMarker(marker);
 
 		return marker;
 	}
@@ -450,7 +492,6 @@ struct Scene
 		Model * straightLine = new Model(Vector3f(0, 0, 0), (grid_material[3]));
 		straightLine->AddStraightLine(start, end, handQ, thickness, color);
 		straightLine->AllocateBuffers();
-		AddRemovable(straightLine);
 
 		return straightLine;
 	}
@@ -462,7 +503,6 @@ struct Scene
 		Model * curvedLine = new Model(Vector3f(0, 0, 0), (grid_material[3]));
 		curvedLine->AddCurvedLine(lineCore, allHandQ, thickness, color);
 		curvedLine->AllocateBuffers();
-		AddRemovable(curvedLine);
 
 		return curvedLine;
 	}
@@ -554,22 +594,59 @@ struct Scene
 		glDeleteShader(fshader);
 	}
 	
+	float DistPointToLineSeg(Vector3f point, std::vector<Vector3f> lineSeg) {
+		Vector3f d = (lineSeg[1]-lineSeg[0] / ((lineSeg[1]-lineSeg[0]).Length()));
+		Vector3f v = point - lineSeg[0];
+		float t = v.Dot(d);
+		float dist = (lineSeg[0] + d*t - point).Length();
+
+		return dist;
+	}
+
 
 	Model * ColorRemovableModel(Vector3f rightHandPos)
 	{
 		//make sure there is currently no targetModel when ColorRemovableModel is called
 		if (!targetModel) {
-			for (auto const m : removableModels) {
+			for (auto const m : removableMarkers) {
 				Model *model = m.first;
 				Vector3f modelPos = (*model).Pos;
 				//Vector3f modelPos(0, 0, 0);
 				if (rightHandPos.Distance(modelPos) <= TARGET_SIZE) {
 					//dark red: 	0xFF800000
 					Model *newMarker = CreateMarker(MARKER_SIZE, 0xFF800000, modelPos);
+					//removing the old green model; replaced by new red one
 					RemoveModel(model);
+					removableMarkers.erase(model);
+
 					targetModel = newMarker;
 
 					return newMarker;
+				}
+			}
+
+			for (auto const m : removableStraightLines) {
+				Model *model = m.first;
+				float dist = DistPointToLineSeg(rightHandPos, (m.second).Core);
+				if (dist <= TARGET_SIZE) {
+					//dark red: 	0xFF800000
+					Model *newStraightLine = CreateStraightLine((m.second).Core[0], (m.second).Core[1],
+						(m.second).Q[0], LINE_THICKNESS, 0xFF800000);
+					removableStraightLines.erase(model);
+					targetModel = newStraightLine;
+
+					return newStraightLine;
+				}
+			}
+
+			for (auto const m : removableCurvedLines) {
+				Model *model = m.first;
+				//for each point defined in the lineCore of a curved line
+				for (Vector3f v : (m.second).Core) {
+					if (rightHandPos.Distance(v) <= TARGET_SIZE) {
+						//dark red: 	0xFF800000
+						Model *newCurvedLine = CreateCurvedLine((m.second).Core, (m.second).Q, LINE_THICKNESS, 0xFF800000);
+					}
 				}
 			}
 		}
@@ -652,6 +729,8 @@ struct Scene
 				Model *newStraightLine = CreateStraightLine(lineCore[0], trans_rightP, rightQ, LINE_THICKNESS, 0xFFA535F0);
 				//if B is pressed (ending the line), just create the line and reset drawingStraightLine and lineCore
 				if (inputStateRight.buttonMask == ovrAvatarButton_Two) {
+					AddRemovable(newStraightLine);
+					AddRemovableStraightLine(newStraightLine, lineCore[0], trans_rightP, rightQ);
 					drawingStraightLine = false;
 					lineCore.clear();
 				}
@@ -671,9 +750,13 @@ struct Scene
 				//pure green: 	0xff008000
 				Model *newCurvedLine = CreateCurvedLine(lineCore, allHandQ, LINE_THICKNESS, 0xff008000);
 				
-				//if we stop drawing the curved line, keep the line in removableModels and reset
+				//if we stop drawing the curved line, put the line in removableModels and reset
 				if (inputStateRight.touchMask != ovrAvatarTouch_Index) {
 					drawingCurvedLine = false;
+
+					AddRemovable(newCurvedLine);
+					AddRemovableCurvedLine(newCurvedLine, lineCore, allHandQ);
+
 					lineCore.clear();
 					allHandQ.clear();
 				}
@@ -778,8 +861,6 @@ struct Scene
 		for (auto const &m : tempLines) {
 			auto model = m.first;
 			tempLines.erase(model);
-			//possibly redundant
-			RemoveModel(model);
 		}
 	}
 	
