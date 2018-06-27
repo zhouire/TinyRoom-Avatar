@@ -186,24 +186,7 @@ struct Model
 			AddIndex(LinSegIndices[i] + GLushort(numVertices));
 
 		// Generate a quad of vertices for each line segment
-		for (int v = 0; v < 2 * 4; v++)
-		{
-			// Make vertices, with some token lighting
-			Vertex vvv; vvv.Pos = Vert[v][0]; vvv.U = Vert[v][1].x; vvv.V = Vert[v][1].y;
-			//not sure what the subtracted Vector3fs are supposed to do
-			float dist1 = (vvv.Pos - Vector3f(-2, 4, -2)).Length();
-			float dist2 = (vvv.Pos - Vector3f(3, 4, -3)).Length();
-			float dist3 = (vvv.Pos - Vector3f(-4, 3, 25)).Length();
-			int   bri = rand() % 160;
-			float B = ((c >> 16) & 0xff) * (bri + 192.0f * (0.65f + 8 / dist1 + 1 / dist2 + 4 / dist3)) / 255.0f;
-			float G = ((c >> 8) & 0xff) * (bri + 192.0f * (0.65f + 8 / dist1 + 1 / dist2 + 4 / dist3)) / 255.0f;
-			float R = ((c >> 0) & 0xff) * (bri + 192.0f * (0.65f + 8 / dist1 + 1 / dist2 + 4 / dist3)) / 255.0f;
-			vvv.C = (c & 0xff000000) +
-				((R > 255 ? 255 : DWORD(R)) << 16) +
-				((G > 255 ? 255 : DWORD(G)) << 8) +
-				(B > 255 ? 255 : DWORD(B));
-			AddVertex(vvv);
-		}
+		genQuadVertices(Vert, 4, c);
 
 	}
 
@@ -229,24 +212,7 @@ struct Model
 			AddIndex(CapIndices[i] + GLushort(numVertices));
 
 		// Generate a quad of vertices for each cap
-		for (int v = 0; v < 2 * 4; v++)
-		{
-			// Make vertices, with some token lighting
-			Vertex vvv; vvv.Pos = Vert[v][0]; vvv.U = Vert[v][1].x; vvv.V = Vert[v][1].y;
-			//not sure what the subtracted Vector3fs are supposed to do
-			float dist1 = (vvv.Pos - Vector3f(-2, 4, -2)).Length();
-			float dist2 = (vvv.Pos - Vector3f(3, 4, -3)).Length();
-			float dist3 = (vvv.Pos - Vector3f(-4, 3, 25)).Length();
-			int   bri = rand() % 160;
-			float B = ((c >> 16) & 0xff) * (bri + 192.0f * (0.65f + 8 / dist1 + 1 / dist2 + 4 / dist3)) / 255.0f;
-			float G = ((c >> 8) & 0xff) * (bri + 192.0f * (0.65f + 8 / dist1 + 1 / dist2 + 4 / dist3)) / 255.0f;
-			float R = ((c >> 0) & 0xff) * (bri + 192.0f * (0.65f + 8 / dist1 + 1 / dist2 + 4 / dist3)) / 255.0f;
-			vvv.C = (c & 0xff000000) +
-				((R > 255 ? 255 : DWORD(R)) << 16) +
-				((G > 255 ? 255 : DWORD(G)) << 8) +
-				(B > 255 ? 255 : DWORD(B));
-			AddVertex(vvv);
-		}
+		genQuadVertices(Vert, 2, c);
 	}
 
 
@@ -265,6 +231,68 @@ struct Model
 		}
 
 		AddEndCaps(edge1, edge2, edge3, edge4, c);
+	}
+
+
+	void AddStraightLine(Vector3f start, Vector3f end, glm::quat handQ, float thickness, DWORD c) {
+		std::vector<Vector3f> added = AddedVectors(start, end, handQ);
+
+		std::vector<Vector3f> edge1{ (start + added[0] * thickness), (end + added[0] * thickness) };
+		std::vector<Vector3f> edge2{ (start + added[1] * thickness), (end + added[1] * thickness) };
+		std::vector<Vector3f> edge3{ (start + added[2] * thickness), (end + added[2] * thickness) };
+		std::vector<Vector3f> edge4{ (start + added[3] * thickness), (end + added[3] * thickness) };
+
+
+		Vector3f Vert[][2] =
+		{
+			edge1[0], Vector3f(0,1), edge1[1], Vector3f(1,1),
+			edge2[1], Vector3f(1,0), edge2[0], Vector3f(0,0),
+
+			edge4[0], Vector3f(0,1), edge4[1], Vector3f(1,1),
+			edge3[1], Vector3f(1,0), edge3[0], Vector3f(0,0),
+
+			edge1[0], Vector3f(0,1), edge1[1], Vector3f(1,1),
+			edge4[1], Vector3f(1,0), edge4[0], Vector3f(0,0),
+
+			edge2[0], Vector3f(0,1), edge2[0], Vector3f(1,1),
+			edge3[1], Vector3f(1,0), edge3[1], Vector3f(0,0),
+		};
+
+		GLushort LinSegIndices[] =
+		{
+			0, 1, 3, 3, 1, 2,
+			5, 4, 6, 6, 4, 7,
+			8, 9, 11, 11, 9, 10,
+			12, 13, 15, 15, 13, 14
+		};
+
+		for (int i = 0; i < sizeof(LinSegIndices) / sizeof(LinSegIndices[0]); ++i)
+			AddIndex(LinSegIndices[i] + GLushort(numVertices));
+
+		// Generate a quad of vertices for the straight line
+		genQuadVertices(Vert, 4, c);
+	}
+
+
+	void genQuadVertices(Vector3f Vert[][2], int numQuads, DWORD c) {
+		for (int v = 0; v < numQuads * 4; v++)
+		{
+			// Make vertices, with some token lighting
+			Vertex vvv; vvv.Pos = Vert[v][0]; vvv.U = Vert[v][1].x; vvv.V = Vert[v][1].y;
+			//not sure what the subtracted Vector3fs are supposed to do
+			float dist1 = (vvv.Pos - Vector3f(-2, 4, -2)).Length();
+			float dist2 = (vvv.Pos - Vector3f(3, 4, -3)).Length();
+			float dist3 = (vvv.Pos - Vector3f(-4, 3, 25)).Length();
+			int   bri = rand() % 160;
+			float B = ((c >> 16) & 0xff) * (bri + 192.0f * (0.65f + 8 / dist1 + 1 / dist2 + 4 / dist3)) / 255.0f;
+			float G = ((c >> 8) & 0xff) * (bri + 192.0f * (0.65f + 8 / dist1 + 1 / dist2 + 4 / dist3)) / 255.0f;
+			float R = ((c >> 0) & 0xff) * (bri + 192.0f * (0.65f + 8 / dist1 + 1 / dist2 + 4 / dist3)) / 255.0f;
+			vvv.C = (c & 0xff000000) +
+				((R > 255 ? 255 : DWORD(R)) << 16) +
+				((G > 255 ? 255 : DWORD(G)) << 8) +
+				(B > 255 ? 255 : DWORD(B));
+			AddVertex(vvv);
+		}
 	}
 
 
@@ -315,15 +343,19 @@ struct Scene
 	//use map for built-in find function
 	std::map<Model*, int> removableModels;
 	std::map<Model*, int> tempModels;
-
 	std::map<Model*, int> tempLines;
 
 	float MARKER_SIZE = 0.02f;
 	float TARGET_SIZE = 0.01f;
+	float LINE_THICKNESS = 0.01f;
+
+	ShaderFill * grid_material[4];
 	//model highlighted for potential removal
 	Model *targetModel;
 
+	//for line drawing functionality
 	std::vector<Vector3f> lineCore;
+	std::vector<glm::quat> allHandQ;
 
 
 	void    Add(Model * n)
@@ -343,6 +375,12 @@ struct Scene
 		tempModels.insert(std::pair<Model*, int>(n, 1));
 	}
 
+	void AddTempLine(Model * n)
+	{
+		RemoveModel(n);
+		tempLines.insert(std::pair<Model *, int>(n, 1));
+	}
+
 	void Render(Matrix4f view, Matrix4f proj)
 	{
 		for (int i = 0; i < Models.size(); ++i)
@@ -356,6 +394,11 @@ struct Scene
 
 		//render tempModels as well
 		for (auto const m : tempModels) {
+			m.first->Render(view, proj);
+		}
+
+		//render tempLines as well
+		for (auto const m : tempLines) {
 			m.first->Render(view, proj);
 		}
 
@@ -391,60 +434,6 @@ struct Scene
 	{
 		//ShaderFill * grid_material = CreateTextures();
 
-
-		static const GLchar* VertexShaderSrc =
-			"#version 150\n"
-			"uniform mat4 matWVP;\n"
-			"in      vec4 Position;\n"
-			"in      vec4 Color;\n"
-			"in      vec2 TexCoord;\n"
-			"out     vec2 oTexCoord;\n"
-			"out     vec4 oColor;\n"
-			"void main()\n"
-			"{\n"
-			"   gl_Position = (matWVP * Position);\n"
-			"   oTexCoord   = TexCoord;\n"
-			"   oColor.rgb  = pow(Color.rgb, vec3(2.2));\n"   // convert from sRGB to linear
-			"   oColor.a    = Color.a;\n"
-			"}\n";
-
-		static const char* FragmentShaderSrc =
-			"#version 150\n"
-			"uniform sampler2D Texture0;\n"
-			"in      vec4      oColor;\n"
-			"in      vec2      oTexCoord;\n"
-			"out     vec4      FragColor;\n"
-			"void main()\n"
-			"{\n"
-			"   FragColor = oColor * texture2D(Texture0, oTexCoord);\n"
-			"}\n";
-
-		GLuint    vshader = CreateShader(GL_VERTEX_SHADER, VertexShaderSrc);
-		GLuint    fshader = CreateShader(GL_FRAGMENT_SHADER, FragmentShaderSrc);
-
-		// Make textures
-		ShaderFill * grid_material[4];
-		for (int k = 0; k < 4; ++k)
-		{
-			static DWORD tex_pixels[256 * 256];
-			for (int j = 0; j < 256; ++j)
-			{
-				for (int i = 0; i < 256; ++i)
-				{
-					if (k == 0) tex_pixels[j * 256 + i] = (((i >> 7) ^ (j >> 7)) & 1) ? 0xffb4b4b4 : 0xff505050;// floor
-					if (k == 1) tex_pixels[j * 256 + i] = (((j / 4 & 15) == 0) || (((i / 4 & 15) == 0) && ((((i / 4 & 31) == 0) ^ ((j / 4 >> 4) & 1)) == 0)))
-						? 0xff3c3c3c : 0xffb4b4b4;// wall
-					if (k == 2) tex_pixels[j * 256 + i] = (i / 4 == 0 || j / 4 == 0) ? 0xff505050 : 0xffb4b4b4;// ceiling
-					if (k == 3) tex_pixels[j * 256 + i] = 0xffffffff;// blank
-				}
-			}
-			TextureBuffer * generated_texture = new TextureBuffer(false, Sizei(256, 256), 4, (unsigned char *)tex_pixels);
-			grid_material[k] = new ShaderFill(vshader, fshader, generated_texture);
-		}
-
-		glDeleteShader(vshader);
-		glDeleteShader(fshader);
-
 		Model * marker = new Model(Vector3f(0, 0, 0), (grid_material[2]));
 		marker->AddSolidColorBox(-0.5f*size, -0.5f*size, -0.5f*size, 0.5f*size, 0.5f*size, 0.5f*size, color);
 		marker->AllocateBuffers();
@@ -454,10 +443,29 @@ struct Scene
 		return marker;
 	}
 
-	Model * CreateThinLine(Vector3f init, Vector3f fin) {
 
+	Model * CreateStraightLine(Vector3f start, Vector3f end, glm::quat handQ, float thickness, DWORD color) {
+		//should be okay to put Pos at origin because the line construction is based on the origin
+		//However, Pos will NOT reflect the actual location of the line!
+		Model * straightLine = new Model(Vector3f(0, 0, 0), (grid_material[1]));
+		straightLine->AddStraightLine(start, end, handQ, thickness, color);
+		straightLine->AllocateBuffers();
+		AddRemovable(straightLine);
+
+		return straightLine;
 	}
 
+
+	Model * CreateCurvedLine(std::vector<Vector3f> lineCore, std::vector<glm::quat> allHandQ, float thickness, DWORD color) {
+		//should be okay to put Pos at origin because the line construction is based on the origin
+		//However, Pos will NOT reflect the actual location of the line!
+		Model * curvedLine = new Model(Vector3f(0, 0, 0), (grid_material[1]));
+		curvedLine->AddCurvedLine(lineCore, allHandQ, thickness, color);
+		curvedLine->AllocateBuffers();
+		AddRemovable(curvedLine);
+
+		return curvedLine;
+	}
 
 	void RemoveModel(Model * n)
 	{
@@ -488,8 +496,8 @@ struct Scene
 		return shader;
 	}
 
-	/*
-	ShaderFill * CreateTextures()
+	
+	void CreateTextures()
 	{
 		static const GLchar* VertexShaderSrc =
 			"#version 150\n"
@@ -520,9 +528,10 @@ struct Scene
 
 		GLuint    vshader = CreateShader(GL_VERTEX_SHADER, VertexShaderSrc);
 		GLuint    fshader = CreateShader(GL_FRAGMENT_SHADER, FragmentShaderSrc);
+		
+		//ShaderFill * grid_material[4];
 
 		// Make textures
-		ShaderFill * grid_material[4];
 		for (int k = 0; k < 4; ++k)
 		{
 			static DWORD tex_pixels[256 * 256];
@@ -543,10 +552,8 @@ struct Scene
 
 		glDeleteShader(vshader);
 		glDeleteShader(fshader);
-
-		return *grid_material;
 	}
-	*/
+	
 
 	Model * ColorRemovableModel(Vector3f rightHandPos)
 	{
@@ -629,9 +636,8 @@ struct Scene
 
 		//should not be allowed to simply hold button A and continuously make a stream of models; let go and press again
 		static bool canCreateMarker = true;
-		//toggle between thin and thick lines
-		static bool thinLines = true;
-
+		static bool drawingStraightLine = false;
+		static bool drawingCurvedLine = false;
 		/*
 		//forward/backwards movement
 		if (inputStateRight.touchMask == ovrAvatarTouch_Joystick) {
@@ -641,35 +647,70 @@ struct Scene
 
 		//if we are actively drawing a line
 		if (lineCore.size() > 0) {
-			if (thinLines) {
-				lineCore.push_back(trans_rightP);
-
+			//if we are drawing a straight line, create a new phantom line
+			if (drawingStraightLine) {
+				Model *newStraightLine = CreateStraightLine(lineCore[0], trans_rightP, rightQ, LINE_THICKNESS, 0xFFA535F0);
+				//if B is pressed (ending the line), just create the line and reset drawingStraightLine and lineCore
+				if (inputStateRight.buttonMask == ovrAvatarButton_Two) {
+					drawingStraightLine = false;
+					lineCore.clear();
+				}
+				//dynamic lines must be regenerated at each timestamp
+				else {
+					AddTempLine(newStraightLine);
+				}				
 			}
+			
+			//if we are drawing a curved line
+			else if (drawingCurvedLine) {
+				lineCore.push_back(trans_rightP);
+				allHandQ.push_back(rightQ);
+				//pure green: 	0xff008000
+				Model *newCurvedLine = CreateCurvedLine(lineCore, allHandQ, LINE_THICKNESS, 0xff008000);
+					
+				//if we stop drawing the curved line, keep the line in removableModels and reset
+				if (inputStateRight.touchMask != ovrAvatarTouch_Index) {
+					drawingCurvedLine = false;
+					lineCore.clear();
+					allHandQ.clear();
+				}
+
+				//dynamic lines must be regenerated at every timestamp
+				else {
+					AddTempLine(newCurvedLine);
+				}
+			}
+			
 		}
 		
 		else {
+			//press B to start drawing a straight line
 			if (inputStateRight.buttonMask == ovrAvatarButton_Two) {
+				drawingStraightLine = true;
+				lineCore.push_back(trans_rightP);
+			}
+
+			//press and hold index to draw a curved line
+			if (inputStateRight.indexTrigger > 0.1) {
+				drawingCurvedLine = true;
 				lineCore.push_back(trans_rightP);
 			}
 
 			//replaced all ovrAvatarButtonTwo with touchMask -> ovrAvatarTouch_Index
+			//stop showing the phantom marker if not touching index button
 			if (inputStateRight.touchMask != ovrAvatarTouch_Index) {
 				removeTempModels();
 			}
-
+			//allow user to create a new marker if they have stopped pressing A
 			if (inputStateRight.buttonMask != ovrAvatarButton_One && !canCreateMarker) {
 				canCreateMarker = true;
 			}
-
+			//clear the target model if the user stops touching index button
 			if (inputStateRight.touchMask != ovrAvatarTouch_Index && targetModel) {
 				Vector3f targetPos = targetModel->Pos;
 				ResetTargetModel(targetPos);
 			}
-
-			if (inputStateLeft.buttonMask == ovrAvatarButton_One) {
-				thinLines = !thinLines;
-			}
-
+			//create a new marker if the user is pressing A and the user is allowed to
 			if (inputStateRight.buttonMask == ovrAvatarButton_One && canCreateMarker) {
 				//pure green: 	0xff008000
 				//yellow (for testing): 0xFFF6FF00
@@ -678,8 +719,9 @@ struct Scene
 				CreateMarker(MARKER_SIZE, 0xff008000, trans_rightP);
 				canCreateMarker = false;
 			}
-
+			//if user is pressing index
 			else if (inputStateRight.touchMask == ovrAvatarTouch_Index) {
+				//purple: 0xFFA535F0
 				Model *newMarker = CreateMarker(MARKER_SIZE, 0xFFA535F0, trans_rightP);
 				AddTemp(newMarker);
 				//we only want the temp marker to be in the tempModels map
@@ -722,6 +764,20 @@ struct Scene
 			auto model = m.first;
 			model->Pos = ovr_rightP;
 		}
+
+		removeTempLines();
+	}
+
+	//remove tempLines; this is necessary at each timestep to update dynamic lines
+	//called in moveTempModels
+	void removeTempLines()
+	{
+		for (auto const &m : tempLines) {
+			auto model = m.first;
+			tempLines.erase(model);
+			//possibly redundant
+			RemoveModel(model);
+		}
 	}
 	
 	//clear map of temp models
@@ -730,15 +786,15 @@ struct Scene
 		for (auto const &m : tempModels) {
 			auto model = m.first;
 			tempModels.erase(model);
+			//possibly redundant
 			RemoveModel(model);
 		}
 	}
 
-
 	
 	void Init(int includeIntensiveGPUobject)
 	{
-		
+		/*
 		static const GLchar* VertexShaderSrc =
 			"#version 150\n"
 			"uniform mat4 matWVP;\n"
@@ -791,6 +847,7 @@ struct Scene
 
 		glDeleteShader(vshader);
 		glDeleteShader(fshader);
+		*/
 		
 
 		//ShaderFill * grid_material = CreateTextures();
@@ -865,6 +922,7 @@ struct Scene
 	Scene(bool includeIntensiveGPUobject) :
 		numModels(0)
 	{
+		CreateTextures();
 		Init(includeIntensiveGPUobject);
 	}
 	void Release()
