@@ -434,7 +434,7 @@ struct Scene
 	{
 		//ShaderFill * grid_material = CreateTextures();
 
-		Model * marker = new Model(Vector3f(0, 0, 0), (grid_material[2]));
+		Model * marker = new Model(Vector3f(0, 0, 0), (grid_material[3]));
 		marker->AddSolidColorBox(-0.5f*size, -0.5f*size, -0.5f*size, 0.5f*size, 0.5f*size, 0.5f*size, color);
 		marker->AllocateBuffers();
 		marker->Pos = pos;
@@ -447,7 +447,7 @@ struct Scene
 	Model * CreateStraightLine(Vector3f start, Vector3f end, glm::quat handQ, float thickness, DWORD color) {
 		//should be okay to put Pos at origin because the line construction is based on the origin
 		//However, Pos will NOT reflect the actual location of the line!
-		Model * straightLine = new Model(Vector3f(0, 0, 0), (grid_material[1]));
+		Model * straightLine = new Model(Vector3f(0, 0, 0), (grid_material[3]));
 		straightLine->AddStraightLine(start, end, handQ, thickness, color);
 		straightLine->AllocateBuffers();
 		AddRemovable(straightLine);
@@ -459,7 +459,7 @@ struct Scene
 	Model * CreateCurvedLine(std::vector<Vector3f> lineCore, std::vector<glm::quat> allHandQ, float thickness, DWORD color) {
 		//should be okay to put Pos at origin because the line construction is based on the origin
 		//However, Pos will NOT reflect the actual location of the line!
-		Model * curvedLine = new Model(Vector3f(0, 0, 0), (grid_material[1]));
+		Model * curvedLine = new Model(Vector3f(0, 0, 0), (grid_material[3]));
 		curvedLine->AddCurvedLine(lineCore, allHandQ, thickness, color);
 		curvedLine->AllocateBuffers();
 		AddRemovable(curvedLine);
@@ -663,11 +663,14 @@ struct Scene
 			
 			//if we are drawing a curved line
 			else if (drawingCurvedLine) {
-				lineCore.push_back(trans_rightP);
-				allHandQ.push_back(rightQ);
+				//only update lineCore if the distance from the last lineCore point is over 0.005
+				if (trans_rightP.Distance(lineCore[lineCore.size() - 1]) >= 0.005) {
+					lineCore.push_back(trans_rightP);
+					allHandQ.push_back(rightQ);
+				}
 				//pure green: 	0xff008000
 				Model *newCurvedLine = CreateCurvedLine(lineCore, allHandQ, LINE_THICKNESS, 0xff008000);
-					
+				
 				//if we stop drawing the curved line, keep the line in removableModels and reset
 				if (inputStateRight.touchMask != ovrAvatarTouch_Index) {
 					drawingCurvedLine = false;
