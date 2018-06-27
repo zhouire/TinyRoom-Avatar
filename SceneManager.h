@@ -114,7 +114,7 @@ struct Model
 	}
 
 	//returns the vectors added to a center point representing the vertices on the edges
-	std::vector<Vector3f> AddedVectors(std::vector<Vector3f> lineCore, glm::quat handQ) {
+	std::vector<Vector3f> AddedVectors(Vector3f prev, Vector3f next, glm::quat handQ) {
 		std::vector<Vector3f> added;
 		
 		//Unit vector representing the pointing orientation
@@ -125,8 +125,8 @@ struct Model
 		v.y = translate.y;
 		v.z = translate.z;
 
-		//generate directional unit vector of the lineCore
-		Vector3f lineDir = lineCore[lineCore.size() - 1] - lineCore[lineCore.size() - 2];
+		//generate directional unit vector of the lineCore (segment we care about right now)
+		Vector3f lineDir = next - prev;
 		Vector3f v_norm = lineDir * (v.Dot(lineDir));
 		Vector3f v_norm_unit = v_norm / (v_norm.Length());
 
@@ -145,13 +145,126 @@ struct Model
 	}
 	
 
+	//Generate the 4 quads (8 triangles) making up the current segment of curved line; called in AddCurvedLine
+	//Also updates the edge vectors
+	void AddLineSegment(Vector3f prev, Vector3f next, glm::quat handQ, float thickness, DWORD c,
+						std::vector<Vector3f> &edge1, std::vector<Vector3f> &edge2, std::vector<Vector3f> &edge3, std::vector<Vector3f> &edge4) {
+		
+		std::vector<Vector3f> added = AddedVectors(prev, next, handQ);
 
-	void AddLineSegment(Vector3f prev, Vector3f next, float thickness, DWORD color) {
-		//TODO
+		Vector3f midpoint = (prev + next) / 2;
+
+		edge1.push_back(added[0]*thickness + midpoint);
+		edge2.push_back(added[1]*thickness + midpoint);
+		edge3.push_back(added[2]*thickness + midpoint);
+		edge4.push_back(added[3]*thickness + midpoint);
+		
+		Vector3f Vert[][2] =
+		{
+			edge1[edge1.size() - 2], Vector3f(0,1), edge1[edge1.size() - 1], Vector3f(1,1),
+			edge2[edge2.size() - 1], Vector3f(1,0), edge2[edge2.size() - 2], Vector3f(0,0),
+
+			edge4[edge4.size() - 2], Vector3f(0,1), edge4[edge4.size() - 1], Vector3f(1,1),
+			edge3[edge3.size() - 1], Vector3f(1,0), edge3[edge3.size() - 2], Vector3f(0,0),
+
+			edge1[edge1.size() - 2], Vector3f(0,1), edge1[edge4.size() - 1], Vector3f(1,1),
+			edge4[edge4.size() - 1], Vector3f(1,0), edge4[edge4.size() - 2], Vector3f(0,0),
+
+			edge2[edge2.size() - 2], Vector3f(0,1), edge2[edge2.size() - 1], Vector3f(1,1),
+			edge3[edge3.size() - 1], Vector3f(1,0), edge3[edge3.size() - 2], Vector3f(0,0),
+		};
+
+		GLushort LinSegIndices[] =
+		{
+			0, 1, 3, 3, 1, 2,
+			5, 4, 6, 6, 4, 7,
+			8, 9, 11, 11, 9, 10,
+			12, 13, 15, 15, 13, 14
+		};
+
+		for (int i = 0; i < sizeof(LinSegIndices) / sizeof(LinSegIndices[0]); ++i)
+			AddIndex(LinSegIndices[i] + GLushort(numVertices));
+
+		// Generate a quad of vertices for each line segment
+		for (int v = 0; v < 2 * 4; v++)
+		{
+			// Make vertices, with some token lighting
+			Vertex vvv; vvv.Pos = Vert[v][0]; vvv.U = Vert[v][1].x; vvv.V = Vert[v][1].y;
+			//not sure what the subtracted Vector3fs are supposed to do
+			float dist1 = (vvv.Pos - Vector3f(-2, 4, -2)).Length();
+			float dist2 = (vvv.Pos - Vector3f(3, 4, -3)).Length();
+			float dist3 = (vvv.Pos - Vector3f(-4, 3, 25)).Length();
+			int   bri = rand() % 160;
+			float B = ((c >> 16) & 0xff) * (bri + 192.0f * (0.65f + 8 / dist1 + 1 / dist2 + 4 / dist3)) / 255.0f;
+			float G = ((c >> 8) & 0xff) * (bri + 192.0f * (0.65f + 8 / dist1 + 1 / dist2 + 4 / dist3)) / 255.0f;
+			float R = ((c >> 0) & 0xff) * (bri + 192.0f * (0.65f + 8 / dist1 + 1 / dist2 + 4 / dist3)) / 255.0f;
+			vvv.C = (c & 0xff000000) +
+				((R > 255 ? 255 : DWORD(R)) << 16) +
+				((G > 255 ? 255 : DWORD(G)) << 8) +
+				(B > 255 ? 255 : DWORD(B));
+			AddVertex(vvv);
+		}
+
 	}
 
-	void AddEndCap(std::vector<Vertex> edge1, std::vector<Vertex> edge2, std::vector<Vertex> edge3, std::vector<Vertex> edge4) {
-		//TODO
+	void AddEndCaps(std::vector<Vector3f> edge1, std::vector<Vector3f> edge2, std::vector<Vector3f> edge3, std::vector<Vector3f> edge4, DWORD c) {
+		Vector3f Vert[][2] =
+		{
+			//beginning cap; textures are default right now
+			edge1[0], Vector3f(0,1), edge2[0], Vector3f(1,1),
+			edge3[0], Vector3f(1,0), edge4[0], Vector3f(0,0),
+
+			//end cap; textures are default right now
+			edge1[edge1.size()-1], Vector3f(0,1), edge2[edge2.size()-1], Vector3f(1,1),
+			edge3[edge3.size()-1], Vector3f(1,0), edge4[edge4.size()-1], Vector3f(0,0),
+		};
+
+		GLushort CapIndices[] =
+		{
+			0, 1, 3, 3, 1, 2,
+			5, 4, 6, 6, 4, 7,
+		};
+
+		for (int i = 0; i < sizeof(CapIndices) / sizeof(CapIndices[0]); ++i)
+			AddIndex(CapIndices[i] + GLushort(numVertices));
+
+		// Generate a quad of vertices for each cap
+		for (int v = 0; v < 2 * 4; v++)
+		{
+			// Make vertices, with some token lighting
+			Vertex vvv; vvv.Pos = Vert[v][0]; vvv.U = Vert[v][1].x; vvv.V = Vert[v][1].y;
+			//not sure what the subtracted Vector3fs are supposed to do
+			float dist1 = (vvv.Pos - Vector3f(-2, 4, -2)).Length();
+			float dist2 = (vvv.Pos - Vector3f(3, 4, -3)).Length();
+			float dist3 = (vvv.Pos - Vector3f(-4, 3, 25)).Length();
+			int   bri = rand() % 160;
+			float B = ((c >> 16) & 0xff) * (bri + 192.0f * (0.65f + 8 / dist1 + 1 / dist2 + 4 / dist3)) / 255.0f;
+			float G = ((c >> 8) & 0xff) * (bri + 192.0f * (0.65f + 8 / dist1 + 1 / dist2 + 4 / dist3)) / 255.0f;
+			float R = ((c >> 0) & 0xff) * (bri + 192.0f * (0.65f + 8 / dist1 + 1 / dist2 + 4 / dist3)) / 255.0f;
+			vvv.C = (c & 0xff000000) +
+				((R > 255 ? 255 : DWORD(R)) << 16) +
+				((G > 255 ? 255 : DWORD(G)) << 8) +
+				(B > 255 ? 255 : DWORD(B));
+			AddVertex(vvv);
+		}
+	}
+
+
+	void AddCurvedLine(std::vector<Vector3f> lineCore, std::vector<glm::quat> allHandQ, float thickness, DWORD c) {
+		std::vector<Vector3f> edge1;
+		std::vector<Vector3f> edge2;
+		std::vector<Vector3f> edge3;
+		std::vector<Vector3f> edge4;
+
+		for (int i = 0; i < (lineCore.size() - 1); i++) {
+			Vector3f prev = lineCore[i];
+			Vector3f next = lineCore[i + 1];
+			glm::quat handQ = allHandQ[i];
+
+			AddLineSegment(prev, next, handQ, thickness, c, edge1, edge2, edge3, edge4);
+		}
+
+		AddEndCaps(edge1, edge2, edge3, edge4, c);
 	}
 
 
