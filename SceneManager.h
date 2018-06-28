@@ -702,6 +702,7 @@ struct Scene
 		targetModelType = nullptr;
 	}
 
+
 	//checks to see if the targetmodel can be cleared so a new model is allowed to be the targetmodel
 	void CheckTargetModel(Vector3f rightHandPos)
 	{
