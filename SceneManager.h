@@ -336,6 +336,12 @@ struct Model
 	}
 };
 
+
+
+
+
+
+
 //------------------------------------------------------------------------- 
 struct Scene
 {
@@ -365,6 +371,7 @@ struct Scene
 	ShaderFill * grid_material[4];
 	//model highlighted for potential removal
 	Model *targetModel;
+	std::string targetModelType;
 
 	//for line drawing functionality
 	std::vector<Vector3f> lineCore;
@@ -388,7 +395,7 @@ struct Scene
 	void AddTemp(Model * n)
 	{
 		RemoveModel(n);
-		removableMarkers.erase(n);
+		//removableMarkers.erase(n);
 		tempModels.insert(std::pair<Model*, int>(n, 1));
 	}
 
@@ -418,6 +425,15 @@ struct Scene
 		line.Core = lineCore;
 		line.Q = allHandQ;
 		removableCurvedLines.insert(std::pair<Model*, LineComponents>(n, line));
+	}
+
+	//calling this removes non-temp models from all "removable" maps
+	void RemoveModel(Model * n)
+	{
+		removableModels.erase(n);
+		removableMarkers.erase(n);
+		removableStraightLines.erase(n);
+		removableCurvedLines.erase(n);
 	}
 
 
@@ -506,11 +522,6 @@ struct Scene
 		curvedLine->AllocateBuffers();
 
 		return curvedLine;
-	}
-
-	void RemoveModel(Model * n)
-	{
-		removableModels.erase(n);
 	}
 
 
@@ -618,9 +629,10 @@ struct Scene
 					Model *newMarker = CreateMarker(MARKER_SIZE, 0xFF800000, modelPos);
 					//removing the old green model; replaced by new red one
 					RemoveModel(model);
-					removableMarkers.erase(model);
+					//removableMarkers.erase(model);
 
 					targetModel = newMarker;
+					targetModelType = "marker";
 
 					return newMarker;
 				}
@@ -633,8 +645,10 @@ struct Scene
 					//dark red: 	0xFF800000
 					Model *newStraightLine = CreateStraightLine((m.second).Core[0], (m.second).Core[1],
 						(m.second).Q[0], LINE_THICKNESS, 0xFF800000);
-					removableStraightLines.erase(model);
+					//removing the old model from all maps
+					RemoveModel(model);
 					targetModel = newStraightLine;
+					targetModelType = "straight line";
 
 					return newStraightLine;
 				}
@@ -647,8 +661,10 @@ struct Scene
 					if (rightHandPos.Distance(v) <= TARGET_SIZE) {
 						//dark red: 	0xFF800000
 						Model *newCurvedLine = CreateCurvedLine((m.second).Core, (m.second).Q, LINE_THICKNESS, 0xFF800000);
-						removableCurvedLines.erase(model);
+						//removing the old model from all maps
+						RemoveModel(model);
 						targetModel = newCurvedLine;
+						targetModelType = "curved line";
 
 						return newCurvedLine;
 					}
@@ -659,13 +675,31 @@ struct Scene
 		return nullptr;
 	}
 
-	void ResetTargetModel(Vector3f targetPos)
+	void ResetTargetModel()
 	{
 		//pure green: 0xff008000
-		Model *newMarker = CreateMarker(MARKER_SIZE, 0xff008000, targetPos);
+		if (targetModelType == "marker") {
+			Vector3f targetPos = targetModel->Pos;
+			Model *newMarker = CreateMarker(MARKER_SIZE, 0xff008000, targetPos);
+		}
+
+		else if (targetModelType == "straight line") {
+			std::vector<Vector3f> core = (removableStraightLines.find(targetModel)->second).Core;
+			std::vector<glm::quat> handQ = (removableStraightLines.find(targetModel)->second).Q;
+			Model *newStraightLine = CreateStraightLine(core[0], core[1], handQ[0], LINE_THICKNESS, 0xff008000);
+		}
+
+		else if (targetModelType == "curved line") {
+			std::vector<Vector3f> core = (removableStraightLines.find(targetModel)->second).Core;
+			std::vector<glm::quat> handQ = (removableStraightLines.find(targetModel)->second).Q;
+			Model *newCurvedLine = CreateCurvedLine(core, handQ, LINE_THICKNESS, 0xff008000);
+		}
+		
+		//removing the red target model from all maps; has been replaced already with a green model
 		RemoveModel(targetModel);
-		removableMarkers.erase(targetModel);
+		//removableMarkers.erase(targetModel);
 		targetModel = nullptr;
+		targetModelType = nullptr;
 	}
 
 	//checks to see if the targetmodel can be cleared so a new model is allowed to be the targetmodel
@@ -673,9 +707,33 @@ struct Scene
 	{
 		//make sure targetModel is not nullptr
 		if (targetModel) {
-			Vector3f targetPos = targetModel->Pos;
-			if (rightHandPos.Distance(targetPos) > TARGET_SIZE) {
-				ResetTargetModel(targetPos);
+			if (targetModelType == "marker") {
+				Vector3f targetPos = targetModel->Pos;
+				if (rightHandPos.Distance(targetPos) > TARGET_SIZE) {
+					ResetTargetModel();
+				}
+			}
+
+			else if (targetModelType == "straight line") {
+				std::vector<Vector3f> core = (removableStraightLines.find(targetModel)->second).Core;
+				float dist = DistPointToLineSeg(rightHandPos, core);
+				if (dist <= TARGET_SIZE) {
+					ResetTargetModel();
+				}
+			}
+
+			else if (targetModelType == "curved line") {
+				bool dist_far = true;
+				std::vector<Vector3f> core = (removableCurvedLines.find(targetModel)->second).Core;
+				for (Vector3f v : core) {
+					if (rightHandPos.Distance(v) <= TARGET_SIZE) {
+						dist_far = false;
+					}
+				}
+
+				if (dist_far) {
+					ResetTargetModel();
+				}
 			}
 		}
 	}
@@ -733,9 +791,10 @@ struct Scene
 		if (lineCore.size() > 0) {
 			//if we are drawing a straight line, create a new phantom line
 			if (drawingStraightLine) {
-				Model *newStraightLine = CreateStraightLine(lineCore[0], trans_rightP, rightQ, LINE_THICKNESS, 0xFFA535F0);
-				//if B is pressed (ending the line), just create the line and reset drawingStraightLine and lineCore
-				if (inputStateRight.buttonMask == ovrAvatarButton_Two) {
+				//pure green: 0xff008000
+				Model *newStraightLine = CreateStraightLine(lineCore[0], trans_rightP, rightQ, LINE_THICKNESS, 0xff008000);
+				//if B let go (ending the line), just create the line and reset drawingStraightLine and lineCore
+				if (inputStateRight.buttonMask != ovrAvatarButton_Two) {
 					AddRemovable(newStraightLine);
 					AddRemovableStraightLine(newStraightLine, lineCore[0], trans_rightP, rightQ);
 					drawingStraightLine = false;
@@ -801,8 +860,7 @@ struct Scene
 			}
 			//clear the target model if the user stops pressing A
 			if (inputStateRight.buttonMask != ovrAvatarButton_One && targetModel) {
-				Vector3f targetPos = targetModel->Pos;
-				ResetTargetModel(targetPos);
+				ResetTargetModel();
 			}
 			//create a new marker if the user is pressing X and the user is allowed to
 			if ((inputStateLeft.buttonMask == ovrAvatarButton_One) && canCreateMarker) {
@@ -830,7 +888,7 @@ struct Scene
 					//delete targetModel if pressing Y
 					if (inputStateLeft.buttonMask == ovrAvatarButton_Two) {
 						RemoveModel(targetModel);
-						removableMarkers.erase(targetModel);
+						//removableMarkers.erase(targetModel);
 						//clear targetModel because the model in question has been removed
 						targetModel = nullptr;
 					}
