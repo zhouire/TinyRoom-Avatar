@@ -127,14 +127,14 @@ struct Model
 
 		//generate directional unit vector of the lineCore (segment we care about right now)
 		Vector3f lineDir = next - prev;
-		Vector3f v_norm = lineDir * (v.Dot(lineDir));
-		Vector3f v_norm_unit = v_norm / (v_norm.Length());
+		//v_tan is the component of v which is tangent to lineDir
+		Vector3f v_tan = lineDir * (v.Dot(lineDir));
 
-		/*
-		Vector3f v_tan = v - v_norm;
-		//unit tangent
-		Vector3f v_tan_unit = v_tan / (v_tan.Length());
-		*/
+		//v_norm is the component of v which is normal to lineDir
+		Vector3f v_norm = v - v_tan;
+		//unit normal
+		Vector3f v_norm_unit = v_norm / (v_norm.Length());
+		
 
 		added.push_back(v_norm_unit);
 		added.push_back(v_norm_unit.Cross(v));
