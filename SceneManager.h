@@ -388,6 +388,7 @@ struct Scene
 	void AddTemp(Model * n)
 	{
 		RemoveModel(n);
+		removableMarkers.erase(n);
 		tempModels.insert(std::pair<Model*, int>(n, 1));
 	}
 
@@ -646,9 +647,14 @@ struct Scene
 					if (rightHandPos.Distance(v) <= TARGET_SIZE) {
 						//dark red: 	0xFF800000
 						Model *newCurvedLine = CreateCurvedLine((m.second).Core, (m.second).Q, LINE_THICKNESS, 0xFF800000);
+						removableCurvedLines.erase(model);
+						targetModel = newCurvedLine;
+
+						return newCurvedLine;
 					}
 				}
 			}
+			return nullptr;
 		}
 		return nullptr;
 	}
@@ -658,6 +664,7 @@ struct Scene
 		//pure green: 0xff008000
 		Model *newMarker = CreateMarker(MARKER_SIZE, 0xff008000, targetPos);
 		RemoveModel(targetModel);
+		removableMarkers.erase(targetModel);
 		targetModel = nullptr;
 	}
 
@@ -750,8 +757,8 @@ struct Scene
 				//pure green: 	0xff008000
 				Model *newCurvedLine = CreateCurvedLine(lineCore, allHandQ, LINE_THICKNESS, 0xff008000);
 				
-				//if we stop drawing the curved line, put the line in removableModels and reset
-				if (inputStateRight.touchMask != ovrAvatarTouch_Index) {
+				//if we stop drawing the curved line (PRESSING index), put the line in removableModels and reset
+				if (inputStateRight.indexTrigger < 0.2) {
 					drawingCurvedLine = false;
 
 					AddRemovable(newCurvedLine);
@@ -777,27 +784,28 @@ struct Scene
 			}
 
 			//press and hold index to draw a curved line
-			if (inputStateRight.indexTrigger > 0.1) {
+			if (inputStateRight.indexTrigger >= 0.2) {
 				drawingCurvedLine = true;
 				lineCore.push_back(trans_rightP);
 			}
 
 			//replaced all ovrAvatarButtonTwo with touchMask -> ovrAvatarTouch_Index
-			//stop showing the phantom marker if not touching index button
-			if (inputStateRight.touchMask != ovrAvatarTouch_Index) {
+			//stop showing the phantom marker if not pressing A
+			if (inputStateRight.buttonMask != ovrAvatarButton_One) {
 				removeTempModels();
 			}
 			//allow user to create a new marker if they have stopped pressing A
-			if (inputStateRight.buttonMask != ovrAvatarButton_One && !canCreateMarker) {
+			//Switched A to X; A+X = create marker
+			if (inputStateLeft.buttonMask != ovrAvatarButton_One && !canCreateMarker) {
 				canCreateMarker = true;
 			}
-			//clear the target model if the user stops touching index button
-			if (inputStateRight.touchMask != ovrAvatarTouch_Index && targetModel) {
+			//clear the target model if the user stops pressing A
+			if (inputStateRight.buttonMask != ovrAvatarButton_One && targetModel) {
 				Vector3f targetPos = targetModel->Pos;
 				ResetTargetModel(targetPos);
 			}
-			//create a new marker if the user is pressing A and the user is allowed to
-			if (inputStateRight.buttonMask == ovrAvatarButton_One && canCreateMarker) {
+			//create a new marker if the user is pressing X and the user is allowed to
+			if ((inputStateLeft.buttonMask == ovrAvatarButton_One) && canCreateMarker) {
 				//pure green: 	0xff008000
 				//yellow (for testing): 0xFFF6FF00
 				//Vector3f * temp;
@@ -805,13 +813,14 @@ struct Scene
 				CreateMarker(MARKER_SIZE, 0xff008000, trans_rightP);
 				canCreateMarker = false;
 			}
-			//if user is pressing index
-			else if (inputStateRight.touchMask == ovrAvatarTouch_Index) {
+			//if user is pressing A
+			else if (inputStateRight.buttonMask == ovrAvatarButton_One) {
 				//purple: 0xFFA535F0
 				Model *newMarker = CreateMarker(MARKER_SIZE, 0xFFA535F0, trans_rightP);
+				
 				AddTemp(newMarker);
 				//we only want the temp marker to be in the tempModels map
-				RemoveModel(newMarker);
+				//RemoveModel(newMarker);
 				//try to find a targetModel if there is not one currently
 				if (!targetModel) {
 					ColorRemovableModel(trans_rightP);
@@ -821,6 +830,7 @@ struct Scene
 					//delete targetModel if pressing Y
 					if (inputStateLeft.buttonMask == ovrAvatarButton_Two) {
 						RemoveModel(targetModel);
+						removableMarkers.erase(targetModel);
 						//clear targetModel because the model in question has been removed
 						targetModel = nullptr;
 					}
