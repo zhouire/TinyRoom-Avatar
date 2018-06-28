@@ -18,8 +18,8 @@ struct Model
 	Quatf           Rot;
 	Matrix4f        Mat;
 	int             numVertices, numIndices;
-	Vertex          Vertices[2000]; // Note fixed maximum
-	GLushort        Indices[2000];
+	Vertex          Vertices[10000]; // Note fixed maximum
+	GLushort        Indices[10000];
 	ShaderFill    * Fill;
 	VertexBuffer  * vertexBuffer;
 	IndexBuffer   * indexBuffer;
@@ -117,7 +117,7 @@ struct Model
 	std::vector<Vector3f> AddedVectors(Vector3f prev, Vector3f next, glm::quat handQ) {
 		std::vector<Vector3f> added;
 		
-		//Unit vector representing the pointing orientation
+		//Unit vector representing the pointing orientation -> v
 		glm::vec4 u(0, 0, 1.0f, 1.0f);
 		glm::vec4 translate = handQ * u;
 		Vector3f v;
@@ -126,7 +126,8 @@ struct Model
 		v.z = translate.z;
 
 		//generate directional unit vector of the lineCore (segment we care about right now)
-		Vector3f lineDir = next - prev;
+		//Vector3f lineDir = next - prev;
+		Vector3f lineDir = (next - prev)/(next-prev).Length();
 		//v_tan is the component of v which is tangent to lineDir
 		Vector3f v_tan = lineDir * (v.Dot(lineDir));
 
@@ -137,9 +138,9 @@ struct Model
 		
 
 		added.push_back(v_norm_unit);
-		added.push_back(v_norm_unit.Cross(v));
+		added.push_back(v_norm_unit.Cross(lineDir));
 		added.push_back(v_norm_unit*(-1));
-		added.push_back(v_norm_unit.Cross(v)*(-1));
+		added.push_back(v_norm_unit.Cross(lineDir)*(-1));
 
 		return added;
 	}
@@ -241,6 +242,8 @@ struct Model
 		std::vector<Vector3f> edge2{ (start + added[1] * thickness), (end + added[1] * thickness) };
 		std::vector<Vector3f> edge3{ (start + added[2] * thickness), (end + added[2] * thickness) };
 		std::vector<Vector3f> edge4{ (start + added[3] * thickness), (end + added[3] * thickness) };
+
+		AddEndCaps(edge1, edge2, edge3, edge4, c);
 
 
 		Vector3f Vert[][2] =
@@ -611,7 +614,9 @@ struct Scene
 		glDeleteShader(fshader);
 	}
 	
+	/*
 	float DistPointToLineSeg(Vector3f point, std::vector<Vector3f> lineSeg) {
+		//directional unit vector of line seg
 		Vector3f d = (lineSeg[1]-lineSeg[0] / ((lineSeg[1]-lineSeg[0]).Length()));
 		Vector3f v = point - lineSeg[0];
 		float t = v.Dot(d);
@@ -620,6 +625,28 @@ struct Scene
 		return dist;
 	}
 
+	*/
+
+	float DistPointToLineSeg(Vector3f point, std::vector<Vector3f> lineSeg) {
+		float dist;
+
+		//vector from start of line seg to point
+		Vector3f v = point - lineSeg[0];
+		float lineSegLen = ((lineSeg[1] - lineSeg[0]).Length());
+		//line seg unit vector
+		Vector3f d = (lineSeg[1] - lineSeg[0]) / lineSegLen;
+		//Intersection point distance from start of lineseg
+		float t = d.Dot(v);
+		
+		if (t >= 0 && t <= lineSegLen) {
+			Vector3f shortestPath = d * t - v; 
+			return shortestPath.Length();
+		}
+		else {
+			//returns a very big number; cannot possibly be under the target size
+			return 100.0f;
+		}
+	}
 
 	Model * ColorRemovableModel(Vector3f rightHandPos)
 	{
@@ -631,7 +658,7 @@ struct Scene
 				//Vector3f modelPos(0, 0, 0);
 				if (rightHandPos.Distance(modelPos) <= TARGET_SIZE) {
 					//dark red: 	0xFF800000
-					Model *newMarker = CreateMarker(MARKER_SIZE, 0xFF800000, modelPos);
+					Model *newMarker = CreateMarker(MARKER_SIZE, 0xFF811111, modelPos);
 					//removing the old green model; replaced by new red one
 					RemoveModel(model);
 					//removableMarkers.erase(model);
@@ -650,6 +677,8 @@ struct Scene
 					//dark red: 	0xFF800000
 					Model *newStraightLine = CreateStraightLine((m.second).Core[0], (m.second).Core[1],
 						(m.second).Q[0], LINE_THICKNESS, 0xFF800000);
+					//adding the new model to appropriate maps
+					AddRemovableStraightLine(newStraightLine, (m.second).Core[0], (m.second).Core[1], (m.second).Q[0]);
 					//removing the old model from all maps
 					RemoveModel(model);
 					targetModel = newStraightLine;
@@ -666,6 +695,8 @@ struct Scene
 					if (rightHandPos.Distance(v) <= TARGET_SIZE) {
 						//dark red: 	0xFF800000
 						Model *newCurvedLine = CreateCurvedLine((m.second).Core, (m.second).Q, LINE_THICKNESS, 0xFF800000);
+						//adding the new model to appropriate maps
+						AddRemovableCurvedLine(newCurvedLine, (m.second).Core, (m.second).Q);
 						//removing the old model from all maps
 						RemoveModel(model);
 						targetModel = newCurvedLine;
@@ -692,19 +723,20 @@ struct Scene
 			std::vector<Vector3f> core = (removableStraightLines.find(targetModel)->second).Core;
 			std::vector<glm::quat> handQ = (removableStraightLines.find(targetModel)->second).Q;
 			Model *newStraightLine = CreateStraightLine(core[0], core[1], handQ[0], LINE_THICKNESS, 0xff008000);
+			AddRemovableStraightLine(newStraightLine, core[0], core[1], handQ[0]);
 		}
 
 		else if (targetModelType == "curved line") {
 			std::vector<Vector3f> core = (removableStraightLines.find(targetModel)->second).Core;
 			std::vector<glm::quat> handQ = (removableStraightLines.find(targetModel)->second).Q;
 			Model *newCurvedLine = CreateCurvedLine(core, handQ, LINE_THICKNESS, 0xff008000);
+			AddRemovableCurvedLine(newCurvedLine, core, handQ);
 		}
 		
 		//removing the red target model from all maps; has been replaced already with a green model
 		RemoveModel(targetModel);
 		//removableMarkers.erase(targetModel);
 		targetModel = nullptr;
-		targetModelType = nullptr;
 	}
 
 
@@ -723,7 +755,7 @@ struct Scene
 			else if (targetModelType == "straight line") {
 				std::vector<Vector3f> core = (removableStraightLines.find(targetModel)->second).Core;
 				float dist = DistPointToLineSeg(rightHandPos, core);
-				if (dist <= TARGET_SIZE) {
+				if (dist > TARGET_SIZE) {
 					ResetTargetModel();
 				}
 			}
@@ -879,7 +911,7 @@ struct Scene
 				//yellow (for testing): 0xFFF6FF00
 				//Vector3f * temp;
 				//*temp = ovr_rightP;
-				CreateMarker(MARKER_SIZE, 0xff008000, trans_rightP);
+				CreateMarker(MARKER_SIZE, 0xff118111, trans_rightP);
 				canCreateMarker = false;
 			}
 			//if user is pressing A
