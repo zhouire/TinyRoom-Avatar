@@ -407,6 +407,7 @@ struct Scene
 	void AddRemovableMarker(Model * n)
 	{
 		removableMarkers.insert(std::pair<Model*, int>(n, 1));
+		AddRemovable(n);
 	}
 
 	void AddRemovableStraightLine(Model * n, Vector3f start, Vector3f end, glm::quat handQ)
@@ -417,6 +418,8 @@ struct Scene
 		std::vector<glm::quat> quat{ handQ };
 		line.Q = quat;
 		removableStraightLines.insert(std::pair<Model*, LineComponents>(n, line));
+
+		AddRemovable(n);
 	}
 	
 	void AddRemovableCurvedLine(Model * n, std::vector<Vector3f> lineCore, std::vector<glm::quat> allHandQ)
@@ -425,7 +428,10 @@ struct Scene
 		line.Core = lineCore;
 		line.Q = allHandQ;
 		removableCurvedLines.insert(std::pair<Model*, LineComponents>(n, line));
+
+		AddRemovable(n);
 	}
+
 
 	//calling this removes non-temp models from all "removable" maps
 	void RemoveModel(Model * n)
@@ -496,7 +502,6 @@ struct Scene
 		marker->AddSolidColorBox(-0.5f*size, -0.5f*size, -0.5f*size, 0.5f*size, 0.5f*size, 0.5f*size, color);
 		marker->AllocateBuffers();
 		marker->Pos = pos;
-		AddRemovable(marker);
 		AddRemovableMarker(marker);
 
 		return marker;
@@ -796,7 +801,6 @@ struct Scene
 				Model *newStraightLine = CreateStraightLine(lineCore[0], trans_rightP, rightQ, LINE_THICKNESS, 0xff008000);
 				//if B let go (ending the line), just create the line and reset drawingStraightLine and lineCore
 				if (inputStateRight.buttonMask != ovrAvatarButton_Two) {
-					AddRemovable(newStraightLine);
 					AddRemovableStraightLine(newStraightLine, lineCore[0], trans_rightP, rightQ);
 					drawingStraightLine = false;
 					lineCore.clear();
@@ -810,10 +814,17 @@ struct Scene
 			//if we are drawing a curved line
 			else if (drawingCurvedLine) {
 				//only update lineCore if the distance from the last lineCore point is over 0.005
+				//commented out bc the typical behavior looks sufficiently distributed
+				/*
 				if (trans_rightP.Distance(lineCore[lineCore.size() - 1]) >= 0.005) {
 					lineCore.push_back(trans_rightP);
 					allHandQ.push_back(rightQ);
 				}
+				*/
+
+				lineCore.push_back(trans_rightP);
+				allHandQ.push_back(rightQ);
+
 				//pure green: 	0xff008000
 				Model *newCurvedLine = CreateCurvedLine(lineCore, allHandQ, LINE_THICKNESS, 0xff008000);
 				
@@ -821,7 +832,6 @@ struct Scene
 				if (inputStateRight.indexTrigger < 0.2) {
 					drawingCurvedLine = false;
 
-					AddRemovable(newCurvedLine);
 					AddRemovableCurvedLine(newCurvedLine, lineCore, allHandQ);
 
 					lineCore.clear();
