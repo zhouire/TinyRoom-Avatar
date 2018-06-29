@@ -18,8 +18,8 @@ struct Model
 	Quatf           Rot;
 	Matrix4f        Mat;
 	int             numVertices, numIndices;
-	Vertex          Vertices[10000]; // Note fixed maximum
-	GLushort        Indices[10000];
+	Vertex          Vertices[20000]; // Note fixed maximum
+	GLushort        Indices[40000];
 	ShaderFill    * Fill;
 	VertexBuffer  * vertexBuffer;
 	IndexBuffer   * indexBuffer;
@@ -870,11 +870,14 @@ struct Scene
 				lineCore.push_back(trans_rightP);
 				allHandQ.push_back(rightQ);
 
+				int numVerticesNext = 8 + (16 * (lineCore.size() + 1));
+
 				//pure green: 	0xff008000
 				Model *newCurvedLine = CreateCurvedLine(lineCore, allHandQ, LINE_THICKNESS, 0xff008000);
 				
 				//if we stop drawing the curved line (PRESSING index), put the line in removableModels and reset
-				if (inputStateRight.indexTrigger < 0.2) {
+				//if the next lineCore addition will exceed the vertex limit (currently 20000), auto-stop drawing
+				if (inputStateRight.indexTrigger < 0.2 || numVerticesNext >= 20000) {
 					drawingCurvedLine = false;
 
 					AddRemovableCurvedLine(newCurvedLine, lineCore, allHandQ);
