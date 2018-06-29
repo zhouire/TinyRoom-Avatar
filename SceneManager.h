@@ -700,9 +700,11 @@ struct Scene
 
 			for (auto const m : removableCurvedLines) {
 				Model *model = m.first;
-				//for each point defined in the lineCore of a curved line
-				for (Vector3f v : (m.second).Core) {
-					if (rightHandPos.Distance(v) <= TARGET_SIZE) {
+				//collision detection with line segments
+				std::vector<Vector3f> core = (m.second).Core;
+				for (int i = 0; i < (core.size()-1); i++) {
+					std::vector<Vector3f> v_seg{ core[i],core[i + 1] };
+					if (DistPointToLineSeg(rightHandPos, v_seg) <= TARGET_SIZE) {
 						//dark red: 	0xFF800000
 						Model *newCurvedLine = CreateCurvedLine((m.second).Core, (m.second).Q, LINE_THICKNESS, 0xFF800000);
 						//adding the new model to appropriate maps
@@ -773,8 +775,9 @@ struct Scene
 			else if (targetModelType == "curved line") {
 				bool dist_far = true;
 				std::vector<Vector3f> core = (removableCurvedLines.find(targetModel)->second).Core;
-				for (Vector3f v : core) {
-					if (rightHandPos.Distance(v) <= TARGET_SIZE) {
+				for (int i = 0; i < (core.size() - 1); i++) {
+					std::vector<Vector3f> v_seg{ core[i],core[i + 1] };
+					if (DistPointToLineSeg(rightHandPos, v_seg) <= TARGET_SIZE) {
 						dist_far = false;
 					}
 				}
