@@ -154,6 +154,14 @@ struct Model
 		std::vector<Vector3f> added = AddedVectors(prev, next, handQ);
 
 		Vector3f midpoint = (prev + next) / 2;
+		
+		//initialize the edge vectors with an initial value; Vert requires 2 elements in each edge vector, but the first midpoint only generates 1
+		if (edge1.size() == 0 && edge2.size() == 0 && edge3.size() == 0 && edge4.size() == 0) {
+			edge1.push_back(added[0] * thickness + prev);
+			edge2.push_back(added[1] * thickness + prev);
+			edge3.push_back(added[2] * thickness + prev);
+			edge4.push_back(added[3] * thickness + prev);
+		}
 
 		edge1.push_back(added[0]*thickness + midpoint);
 		edge2.push_back(added[1]*thickness + midpoint);
@@ -177,10 +185,10 @@ struct Model
 
 		GLushort LinSegIndices[] =
 		{
-			0, 1, 3, 3, 1, 2,
-			5, 4, 6, 6, 4, 7,
+			3, 2, 0, 0, 2, 1,
+			6, 7, 5, 5, 7, 4,
 			8, 9, 11, 11, 9, 10,
-			12, 13, 15, 15, 13, 14
+			13, 12, 14, 14, 12, 15
 		};
 
 		for (int i = 0; i < sizeof(LinSegIndices) / sizeof(LinSegIndices[0]); ++i)
@@ -205,8 +213,10 @@ struct Model
 
 		GLushort CapIndices[] =
 		{
-			0, 1, 3, 3, 1, 2,
-			5, 4, 6, 6, 4, 7,
+			//0, 1, 3, 3, 1, 2,
+			//5, 4, 6, 6, 4, 7,
+			0, 3, 1, 1, 3, 2,
+			5, 6, 4, 4, 6, 7
 		};
 
 		for (int i = 0; i < sizeof(CapIndices) / sizeof(CapIndices[0]); ++i)
@@ -257,16 +267,16 @@ struct Model
 			edge1[0], Vector3f(0,1), edge1[1], Vector3f(1,1),
 			edge4[1], Vector3f(1,0), edge4[0], Vector3f(0,0),
 
-			edge2[0], Vector3f(0,1), edge2[0], Vector3f(1,1),
-			edge3[1], Vector3f(1,0), edge3[1], Vector3f(0,0),
+			edge2[0], Vector3f(0,1), edge2[1], Vector3f(1,1),
+			edge3[1], Vector3f(1,0), edge3[0], Vector3f(0,0),
 		};
 
 		GLushort LinSegIndices[] =
 		{
-			0, 1, 3, 3, 1, 2,
-			5, 4, 6, 6, 4, 7,
+			3, 2, 0, 0, 2, 1,
+			6, 7, 5, 5, 7, 4,
 			8, 9, 11, 11, 9, 10,
-			12, 13, 15, 15, 13, 14
+			13, 12, 14, 14, 12, 15
 		};
 
 		for (int i = 0; i < sizeof(LinSegIndices) / sizeof(LinSegIndices[0]); ++i)
@@ -727,8 +737,8 @@ struct Scene
 		}
 
 		else if (targetModelType == "curved line") {
-			std::vector<Vector3f> core = (removableStraightLines.find(targetModel)->second).Core;
-			std::vector<glm::quat> handQ = (removableStraightLines.find(targetModel)->second).Q;
+			std::vector<Vector3f> core = (removableCurvedLines.find(targetModel)->second).Core;
+			std::vector<glm::quat> handQ = (removableCurvedLines.find(targetModel)->second).Q;
 			Model *newCurvedLine = CreateCurvedLine(core, handQ, LINE_THICKNESS, 0xff008000);
 			AddRemovableCurvedLine(newCurvedLine, core, handQ);
 		}

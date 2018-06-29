@@ -4,6 +4,7 @@
 #include "OVR_KeyValuePairType.h"
 #include "OVR_MatchmakingCriterionImportance.h"
 #include "OVR_VoipSampleRate.h"
+#include "OVR_MediaContentType.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -16,6 +17,14 @@ extern "C" {
 /// Represents a single state change in the platform such as the
 /// response to a request, or some new information from the backend.
 typedef uint64_t ovrRequest;
+
+// Represents an RequestID that can used as a default.
+// We guarantee that no valid Request ID will equal invalidRequestID
+const uint64_t invalidRequestID = 0;
+
+// Represents an invalid MessageID that can used as a default.
+// We guarantee that no valid Message ID will equal invalidMessageID
+const uint64_t invalidMessageID = 0;
 
 typedef struct {
   const char *key;
@@ -60,21 +69,6 @@ typedef struct {
   unsigned int customQueryCriterionArrayCount;
 } ovrMatchmakingCustomQueryData;
 
-/// Describes the various results possible when attempting to initialize the platform.
-/// Anything other than ovrPlatformInitialize_Success should generally be considered a
-/// fatal error with respect to using the platform, as the platform is not guaranteed
-/// to be legitimate or work correctly.
-typedef enum ovrPlatformInitializeResult_ {
-	ovrPlatformInitialize_Success = 0,
-	ovrPlatformInitialize_Uninitialized = -1,
-	ovrPlatformInitialize_PreLoaded = -2,
-	ovrPlatformInitialize_FileInvalid = -3,
-	ovrPlatformInitialize_SignatureInvalid = -4,
-	ovrPlatformInitialize_UnableToVerify = -5,
-	ovrPlatformInitialize_VersionMismatch = -6,
-} ovrPlatformInitializeResult;
-
-
 /// A unique identifier for some entity in the system (user, room, etc).
 ///
 typedef uint64_t ovrID;
@@ -98,6 +92,9 @@ extern LogFunctionPtr DoLogging;
 ///
 typedef void(*VoipFilterCallback)(int16_t pcmData[], size_t pcmDataLength, int frequency, int numChannels);
 
+/// Callback used by the ovrMicrophone class to signal that data is available
+///
+typedef void(*MicrophoneDataAvailableCallback)(void *);
 
 #ifdef __cplusplus
 }
